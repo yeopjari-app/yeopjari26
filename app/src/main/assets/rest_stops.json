@@ -1,0 +1,6 @@
+[
+  { "id": "demo-a", "name": "샘플 졸음쉼터 A", "lat": 37.20, "lon": 127.10, "kind": "DROWSY_SHELTER" },
+  { "id": "demo-b", "name": "샘플 휴게소 B", "lat": 36.95, "lon": 127.10, "kind": "SERVICE_AREA" },
+  { "id": "demo-c", "name": "샘플 졸음쉼터 C", "lat": 36.70, "lon": 127.10, "kind": "DROWSY_SHELTER" },
+  { "id": "demo-d", "name": "샘플 휴게소 D", "lat": 36.45, "lon": 127.10, "kind": "SERVICE_AREA" }
+]

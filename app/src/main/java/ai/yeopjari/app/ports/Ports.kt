@@ -1,0 +1,61 @@
+package ai.yeopjari.app.ports
+
+import ai.yeopjari.core.GeoPoint
+import ai.yeopjari.core.RestStop
+import ai.yeopjari.core.VehicleSnapshot
+import kotlinx.coroutines.flow.Flow
+
+/** 차량 상태(차속·기어) 공급원. Pleos 는 Vehicle SDK, 시연은 가상 주행. */
+interface VehicleSource {
+    val snapshots: Flow<VehicleSnapshot>
+}
+
+interface LocationSource {
+    suspend fun current(): GeoPoint?
+}
+
+/** 휴식 장소를 경로에 경유지로 추가한다. 성공하면 true. */
+interface Navigator {
+    suspend fun addWaypoint(stop: RestStop): Boolean
+}
+
+/** 실내 환기(외기 유입). 지원하지 않으면 false 를 돌려주고 운전자에게 창문을 권한다. */
+interface CabinControl {
+    suspend fun freshAir(): Boolean
+}
+
+/** 질문 뒤 인식한 답과, 듣기 시작부터 말하기 시작까지 걸린 시간. */
+data class Heard(val text: String, val latencyMs: Long)
+
+interface VoiceIO {
+    val canListen: Boolean
+    suspend fun speak(text: String)
+    suspend fun listen(timeoutMs: Long): Heard?
+    fun release()
+}
+
+/** 시연용 조작(가상 주행에서만 제공). */
+interface DemoControls {
+    fun parkForRest()
+    fun resumeDriving()
+}
+
+/** 음성 체크 주기 등 플랫폼별 설정. 시연 빌드는 시간을 압축한다. */
+data class CopilotConfig(
+    val normalIntervalMs: Long,
+    val cautionIntervalMs: Long,
+    val listenTimeoutMs: Long = 8_000,
+    val restStopRadiusKm: Double = 30.0,
+)
+
+class Platform(
+    val vehicle: VehicleSource,
+    val location: LocationSource,
+    val navigator: Navigator,
+    val cabin: CabinControl,
+    val config: CopilotConfig,
+    val demo: DemoControls? = null,
+    private val onRelease: () -> Unit = {},
+) {
+    fun release() = onRelease()
+}
