@@ -2,8 +2,18 @@ package ai.yeopjari.core
 
 enum class Gear { PARK, REVERSE, NEUTRAL, DRIVE, UNKNOWN }
 
-/** 차량 상태 표본. [timeMs] 는 단조 증가하는 시각(시뮬레이션에서는 가상 시각). */
-data class VehicleSnapshot(val timeMs: Long, val speedKph: Float, val gear: Gear)
+/**
+ * 차량 상태 표본. [timeMs] 는 단조 증가하는 시각(시뮬레이션에서는 가상 시각).
+ * 방향지시등·급제동·조향각은 말을 걸어도 되는 순간인지 판단하는 데 쓴다([WorkloadGate]).
+ */
+data class VehicleSnapshot(
+    val timeMs: Long,
+    val speedKph: Float,
+    val gear: Gear,
+    val turnSignalOn: Boolean = false,
+    val hardBraking: Boolean = false,
+    val steeringAngleDeg: Float = 0f,
+)
 
 sealed interface DriveEvent {
     /** 동행 시작 조건 충족 */

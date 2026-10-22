@@ -42,6 +42,8 @@ private val StageColors = mapOf(
 @Composable
 fun CopilotScreen(
     state: UiState,
+    onLaneChange: () -> Unit,
+    onHardBrake: () -> Unit,
     onParkForRest: () -> Unit,
     onResumeDriving: () -> Unit,
 ) {
@@ -50,7 +52,7 @@ fun CopilotScreen(
             StageCard(state, Modifier.weight(1f).fillMaxHeight())
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("옆자리", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                Info("상태", if (state.parked) "정차" else if (state.accompanying) "동행 중" else "대기")
+                Info("상태", statusText(state))
                 Info("차속", "${state.speedKph} km/h")
                 Info("연속 주행", "${state.drivingMinutes}분")
                 Info("평소 응답 속도", "%.1f초".format(state.baselineSec))
@@ -64,6 +66,10 @@ fun CopilotScreen(
                 if (state.demoAvailable) {
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(onClick = onLaneChange) { Text("차선 변경") }
+                        OutlinedButton(onClick = onHardBrake) { Text("급제동") }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Button(onClick = onParkForRest) { Text("휴식 정차") }
                         OutlinedButton(onClick = onResumeDriving) { Text("다시 출발") }
                     }
@@ -73,22 +79,43 @@ fun CopilotScreen(
     }
 }
 
+private fun statusText(state: UiState): String = when {
+    state.napping -> "파워냅 중"
+    state.parked -> "정차"
+    state.quietReason != null -> "조용히 · ${state.quietReason}"
+    state.accompanying -> "동행 중"
+    else -> "대기"
+}
+
 @Composable
 private fun StageCard(state: UiState, modifier: Modifier) {
-    val color = if (state.accompanying) StageColors.getValue(state.stage) else Color(0xFF37474F)
+    val color = when {
+        state.napping -> Color(0xFF283593)
+        state.accompanying -> StageColors.getValue(state.stage)
+        else -> Color(0xFF37474F)
+    }
     Box(
         modifier = modifier.background(color, RoundedCornerShape(32.dp)),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = if (state.accompanying) state.stage.label else "대기",
+                text = when {
+                    state.napping -> "휴식"
+                    state.accompanying -> state.stage.label
+                    else -> "대기"
+                },
                 fontSize = 96.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
             )
             Text(
-                text = if (state.accompanying) "옆자리가 함께하는 중" else "고속 주행이 이어지면 함께해요",
+                text = when {
+                    state.napping -> "15분 뒤에 깨워 드릴게요"
+                    state.quietReason != null -> "운전에 집중하실 때는 조용히 있을게요"
+                    state.accompanying -> "옆자리가 함께하는 중"
+                    else -> "고속 주행이 이어지면 함께해요"
+                },
                 style = MaterialTheme.typography.titleMedium,
                 color = Color.White.copy(alpha = 0.85f),
             )
@@ -114,10 +141,12 @@ private fun CopilotScreenPreview() {
             speedKph = 100,
             drivingMinutes = 142,
             baselineSec = 1.2,
-            lastExchange = "Q. 7 더하기 5 는 얼마일까요?\nA. 13 (2.8초)",
+            lastExchange = "Q. 휴게소 간식 중에 뭐 좋아하세요?\nA. 음… 호두과자요 (2.8초)",
             log = listOf("체크: 2.8초 → 주의", "동행 시작 (고속 주행 30분)"),
             demoAvailable = true,
         ),
+        onLaneChange = {},
+        onHardBrake = {},
         onParkForRest = {},
         onResumeDriving = {},
     )

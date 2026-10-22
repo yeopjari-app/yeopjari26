@@ -19,9 +19,14 @@ interface Navigator {
     suspend fun addWaypoint(stop: RestStop): Boolean
 }
 
-/** 실내 환기(외기 유입). 지원하지 않으면 false 를 돌려주고 운전자에게 창문을 권한다. */
+/**
+ * 실내 제어. 지원하지 않는 기능은 false 를 돌려주고, 그때는 음성 안내로 대신한다.
+ * 좌석 제어는 P단 정차 중 파워냅 모드에서만 쓴다.
+ */
 interface CabinControl {
     suspend fun freshAir(): Boolean
+    suspend fun reclineSeat(): Boolean
+    suspend fun restoreSeat(): Boolean
 }
 
 /** 질문 뒤 인식한 답과, 듣기 시작부터 말하기 시작까지 걸린 시간. */
@@ -36,6 +41,8 @@ interface VoiceIO {
 
 /** 시연용 조작(가상 주행에서만 제공). */
 interface DemoControls {
+    fun laneChange()
+    fun hardBrake()
     fun parkForRest()
     fun resumeDriving()
 }
@@ -44,6 +51,7 @@ interface DemoControls {
 data class CopilotConfig(
     val normalIntervalMs: Long,
     val cautionIntervalMs: Long,
+    val napMs: Long,
     val listenTimeoutMs: Long = 8_000,
     val restStopRadiusKm: Double = 30.0,
 )

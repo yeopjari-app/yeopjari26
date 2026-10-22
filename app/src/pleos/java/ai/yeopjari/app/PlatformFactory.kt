@@ -28,7 +28,11 @@ fun createPlatform(context: Context): Platform {
         location = AndroidLocationSource(context),
         navigator = PleosNavigator(),
         cabin = PleosCabinControl(vehicle),
-        config = CopilotConfig(normalIntervalMs = 15 * 60_000L, cautionIntervalMs = 5 * 60_000L),
+        config = CopilotConfig(
+            normalIntervalMs = 15 * 60_000L,
+            cautionIntervalMs = 5 * 60_000L,
+            napMs = 15 * 60_000L,
+        ),
         onRelease = {
             state.stop()
             vehicle.release()
@@ -37,28 +41,39 @@ fun createPlatform(context: Context): Platform {
 }
 
 /**
- * 차속·기어를 Vehicle SDK 리스너로 받아 1초마다 표본으로 내보낸다.
+ * 차량 상태를 Vehicle SDK 리스너로 받아 1초마다 표본으로 내보낸다.
  *
- * TODO(pleos): Pleos Playground API 참조에서 차속(PERF_VEHICLE_SPEED, m/s)과 기어 선택(GEAR_SELECTION)의
- *  타입 API 이름을 확인해 [start] 에서 capability 확인 → register 리스너를 연결한다.
- *  패턴은 pleos-sample-vehicle-app 의 Door Position 예제(check…Capabilities → register… → unregister…)와 같다.
- *  리스너에서 [speedKph] 는 m/s × 3.6, [gear] 는 P/R/N/D 로 변환해 넣는다.
+ * TODO(pleos): Pleos Playground API 참조에서 아래 값의 타입 API 이름을 확인해 [start] 에서
+ *  capability 확인 → register 리스너를 연결한다. 패턴은 pleos-sample-vehicle-app 의 Door Position 예제
+ *  (check…Capabilities → register… → unregister…)와 같다.
+ *  - 차속(PERF_VEHICLE_SPEED, m/s → × 3.6) / 기어 선택(GEAR_SELECTION → P/R/N/D)  ← 필수
+ *  - 방향지시등(TurnSignal 도메인) / 브레이크(Brake 도메인, 급제동 판단) / 조향각(SteeringWheel 도메인)
  *  연결 전까지는 값이 갱신되지 않아 동행이 시작되지 않는다.
  */
 private class PleosVehicleState(private val vehicle: Vehicle) : VehicleSource {
     @Volatile private var speedKph = 0f
     @Volatile private var gear = Gear.UNKNOWN
+    @Volatile private var turnSignalOn = false
+    @Volatile private var hardBraking = false
+    @Volatile private var steeringAngleDeg = 0f
 
     override val snapshots: Flow<VehicleSnapshot> = flow {
         start()
         while (true) {
-            emit(VehicleSnapshot(System.currentTimeMillis(), speedKph, gear))
+            emit(
+                VehicleSnapshot(
+                    System.currentTimeMillis(), speedKph, gear,
+                    turnSignalOn = turnSignalOn,
+                    hardBraking = hardBraking,
+                    steeringAngleDeg = steeringAngleDeg,
+                )
+            )
             delay(1_000)
         }
     }
 
     private fun start() {
-        // TODO(pleos): vehicle.getCarInfo() / vehicle.getDrivingMode() 등에서 차속·기어 리스너 등록
+        // TODO(pleos): 차속·기어·방향지시등·브레이크·조향각 리스너 등록
     }
 
     fun stop() {
@@ -67,11 +82,15 @@ private class PleosVehicleState(private val vehicle: Vehicle) : VehicleSource {
 }
 
 /**
- * TODO(pleos): vehicle.getHVAC() 의 외기/내기 순환 API 로 외기 유입을 켠다.
- *  capability 의 accessType 이 제어를 허용할 때만 호출하고, 성공 콜백에서 true 를 돌려준다.
+ * TODO(pleos): capability 의 accessType 이 제어를 허용할 때만 호출하고, 성공 콜백에서 true 를 돌려준다.
+ *  - [freshAir]: vehicle.getHVAC() 의 외기/내기 순환 API 로 외기 유입
+ *  - [reclineSeat] / [restoreSeat]: vehicle.getSeat() 의 운전석 등받이 각도. 눕히기 전 각도를 저장했다가 되돌린다.
+ *    P단 정차 중에만 호출된다.
  */
 private class PleosCabinControl(private val vehicle: Vehicle) : CabinControl {
     override suspend fun freshAir(): Boolean = false
+    override suspend fun reclineSeat(): Boolean = false
+    override suspend fun restoreSeat(): Boolean = false
 }
 
 /**

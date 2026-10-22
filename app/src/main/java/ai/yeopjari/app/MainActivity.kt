@@ -33,6 +33,8 @@ class MainActivity : ComponentActivity() {
                 val state by viewModel.ui.collectAsStateWithLifecycle()
                 CopilotScreen(
                     state = state,
+                    onLaneChange = viewModel::laneChange,
+                    onHardBrake = viewModel::hardBrake,
                     onParkForRest = viewModel::parkForRest,
                     onResumeDriving = viewModel::resumeDriving,
                 )
