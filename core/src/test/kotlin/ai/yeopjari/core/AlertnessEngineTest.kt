@@ -53,4 +53,11 @@ class AlertnessEngineTest {
         assertEquals(AlertStage.NORMAL, engine.stage)
         assertEquals(1_000, engine.baselineMs)
     }
+
+    @Test
+    fun `차량 졸음 경고는 바로 위험 단계`() {
+        val engine = AlertnessEngine()
+        repeat(3) { engine.record(CheckResult(1_000, correct = true)) }
+        assertEquals(AlertStage.DANGER, engine.recordVehicleWarning())
+    }
 }

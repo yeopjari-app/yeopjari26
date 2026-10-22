@@ -35,6 +35,8 @@ class MainActivity : ComponentActivity() {
                     state = state,
                     onLaneChange = viewModel::laneChange,
                     onHardBrake = viewModel::hardBrake,
+                    onTogglePassenger = viewModel::togglePassenger,
+                    onVehicleWarning = viewModel::vehicleDrowsinessWarning,
                     onParkForRest = viewModel::parkForRest,
                     onResumeDriving = viewModel::resumeDriving,
                 )

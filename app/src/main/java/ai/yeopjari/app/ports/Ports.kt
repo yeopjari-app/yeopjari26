@@ -29,13 +29,24 @@ interface CabinControl {
     suspend fun restoreSeat(): Boolean
 }
 
-/** 질문 뒤 인식한 답과, 듣기 시작부터 말하기 시작까지 걸린 시간. */
-data class Heard(val text: String, val latencyMs: Long)
+/**
+ * 한 번 듣기의 결과. 운전자가 정말 말하지 않은 [Silent] 와, 마이크·인식기 문제로 들을 수 없었던
+ * [Unavailable] 을 구분한다. 후자는 졸음 판정에 넣지 않는다.
+ */
+sealed interface ListenResult {
+    /** 인식한 답과, 듣기 시작부터 말하기 시작까지 걸린 시간. */
+    data class Heard(val text: String, val latencyMs: Long) : ListenResult
+    data object Silent : ListenResult
+    data object Unavailable : ListenResult
+}
+
+val ListenResult.text: String?
+    get() = (this as? ListenResult.Heard)?.text
 
 interface VoiceIO {
     val canListen: Boolean
     suspend fun speak(text: String)
-    suspend fun listen(timeoutMs: Long): Heard?
+    suspend fun listen(timeoutMs: Long): ListenResult
     fun release()
 }
 
@@ -43,6 +54,8 @@ interface VoiceIO {
 interface DemoControls {
     fun laneChange()
     fun hardBrake()
+    fun togglePassenger()
+    fun vehicleDrowsinessWarning()
     fun parkForRest()
     fun resumeDriving()
 }
@@ -52,6 +65,7 @@ data class CopilotConfig(
     val normalIntervalMs: Long,
     val cautionIntervalMs: Long,
     val napMs: Long,
+    val quietModeMs: Long,
     val listenTimeoutMs: Long = 8_000,
     val restStopRadiusKm: Double = 30.0,
 )

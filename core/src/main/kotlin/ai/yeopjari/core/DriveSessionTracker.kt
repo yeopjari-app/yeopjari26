@@ -5,6 +5,7 @@ enum class Gear { PARK, REVERSE, NEUTRAL, DRIVE, UNKNOWN }
 /**
  * 차량 상태 표본. [timeMs] 는 단조 증가하는 시각(시뮬레이션에서는 가상 시각).
  * 방향지시등·급제동·조향각은 말을 걸어도 되는 순간인지 판단하는 데 쓴다([WorkloadGate]).
+ * [passengerPresent] 는 조수석 탑승 여부, [drowsinessWarning] 은 차량 자체의 운전자 주의 경고 작동 여부.
  */
 data class VehicleSnapshot(
     val timeMs: Long,
@@ -13,6 +14,8 @@ data class VehicleSnapshot(
     val turnSignalOn: Boolean = false,
     val hardBraking: Boolean = false,
     val steeringAngleDeg: Float = 0f,
+    val passengerPresent: Boolean = false,
+    val drowsinessWarning: Boolean = false,
 )
 
 sealed interface DriveEvent {

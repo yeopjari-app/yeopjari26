@@ -29,9 +29,12 @@ class QuestionBank(
         Topic.FOOD to listOf("휴게소 간식 중에 뭐 좋아하세요?", "도착하면 뭐 드시고 싶으세요?"),
     )
 
-    /** [nextRestStop] 을 알면 가끔 그 이름으로 말을 건다. */
-    fun next(nextRestStop: String? = null): Question {
-        val roll = random.nextInt(3)
+    /**
+     * [nextRestStop] 을 알면 가끔 그 이름으로 말을 건다.
+     * [checkInOnly] 면 운전자가 "조용히 해 줘"라고 한 동안처럼 짧은 확인 멘트만 쓴다.
+     */
+    fun next(nextRestStop: String? = null, checkInOnly: Boolean = false): Question {
+        val roll = if (checkInOnly) 0 else random.nextInt(3)
         if (roll == 0) return Question(checkIns[random.nextInt(checkIns.size)])
         if (nextRestStop != null && roll == 1) return Question("곧 ${nextRestStop}이 나와요. 들러 보신 적 있으세요?")
         val pool = topics.flatMap { chats.getValue(it) }.ifEmpty { checkIns }

@@ -51,6 +51,14 @@ class AlertnessEngine(
         return stage
     }
 
+    /** 차량의 운전자 주의 경고가 울리면 대화 결과와 상관없이 바로 위험 단계로 올린다. */
+    fun recordVehicleWarning(): AlertStage {
+        scores.addLast(dangerScore)
+        if (scores.size > windowSize) scores.removeFirst()
+        stage = AlertStage.DANGER
+        return stage
+    }
+
     /** 휴식이 확인되면 최근 기록을 지운다. 기준선은 유지한다. */
     fun resetAfterRest() {
         scores.clear()

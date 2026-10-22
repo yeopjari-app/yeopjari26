@@ -1,6 +1,6 @@
 package ai.yeopjari.app.voice
 
-import ai.yeopjari.app.ports.Heard
+import ai.yeopjari.app.ports.ListenResult
 import ai.yeopjari.app.ports.VoiceIO
 import android.content.Context
 import android.content.Intent
@@ -53,20 +53,24 @@ class AndroidVoiceIO(context: Context) : VoiceIO {
         }
     }
 
-    /** SpeechRecognizer 는 메인 스레드에서만 동작한다. 지연은 듣기 시작 → 말하기 시작까지. */
-    override suspend fun listen(timeoutMs: Long): Heard? {
-        if (!canListen) return null
+    /**
+     * SpeechRecognizer 는 메인 스레드에서만 동작한다. 지연은 듣기 시작 → 말하기 시작까지.
+     * 시간 초과·인식 결과 없음은 [ListenResult.Silent], 그 밖의 오류(권한·네트워크·인식기 사용 중 등)는
+     * [ListenResult.Unavailable] 로 돌려준다.
+     */
+    override suspend fun listen(timeoutMs: Long): ListenResult {
+        if (!canListen) return ListenResult.Unavailable
         return withContext(Dispatchers.Main) {
             val recognizer = SpeechRecognizer.createSpeechRecognizer(appContext)
             try {
-                withTimeoutOrNull(timeoutMs) { recognize(recognizer) }
+                withTimeoutOrNull(timeoutMs) { recognize(recognizer) } ?: ListenResult.Silent
             } finally {
                 recognizer.destroy()
             }
         }
     }
 
-    private suspend fun recognize(recognizer: SpeechRecognizer): Heard? =
+    private suspend fun recognize(recognizer: SpeechRecognizer): ListenResult =
         suspendCancellableCoroutine { cont ->
             val startedAt = SystemClock.elapsedRealtime()
             var speechAt: Long? = null
@@ -78,13 +82,19 @@ class AndroidVoiceIO(context: Context) : VoiceIO {
                     val text = results
                         ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         ?.firstOrNull()
-                    val heard = text?.let {
-                        Heard(it, (speechAt ?: SystemClock.elapsedRealtime()) - startedAt)
+                    val result = if (text.isNullOrBlank()) {
+                        ListenResult.Silent
+                    } else {
+                        ListenResult.Heard(text, (speechAt ?: SystemClock.elapsedRealtime()) - startedAt)
                     }
-                    if (cont.isActive) cont.resume(heard)
+                    if (cont.isActive) cont.resume(result)
                 }
                 override fun onError(error: Int) {
-                    if (cont.isActive) cont.resume(null)
+                    val result = when (error) {
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_NO_MATCH -> ListenResult.Silent
+                        else -> ListenResult.Unavailable
+                    }
+                    if (cont.isActive) cont.resume(result)
                 }
                 override fun onReadyForSpeech(params: Bundle?) = Unit
                 override fun onRmsChanged(rmsdB: Float) = Unit

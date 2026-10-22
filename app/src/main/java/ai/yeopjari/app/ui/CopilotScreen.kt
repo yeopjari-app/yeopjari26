@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -44,13 +46,18 @@ fun CopilotScreen(
     state: UiState,
     onLaneChange: () -> Unit,
     onHardBrake: () -> Unit,
+    onTogglePassenger: () -> Unit,
+    onVehicleWarning: () -> Unit,
     onParkForRest: () -> Unit,
     onResumeDriving: () -> Unit,
 ) {
     Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF111418)) {
         Row(modifier = Modifier.padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             StageCard(state, Modifier.weight(1f).fillMaxHeight())
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 Text("옆자리", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 Info("상태", statusText(state))
                 Info("차속", "${state.speedKph} km/h")
@@ -70,6 +77,12 @@ fun CopilotScreen(
                         OutlinedButton(onClick = onHardBrake) { Text("급제동") }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(onClick = onTogglePassenger) {
+                            Text(if (state.passengerPresent) "동승자 하차" else "동승자 탑승")
+                        }
+                        OutlinedButton(onClick = onVehicleWarning) { Text("차량 졸음 경고") }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Button(onClick = onParkForRest) { Text("휴식 정차") }
                         OutlinedButton(onClick = onResumeDriving) { Text("다시 출발") }
                     }
@@ -82,7 +95,9 @@ fun CopilotScreen(
 private fun statusText(state: UiState): String = when {
     state.napping -> "파워냅 중"
     state.parked -> "정차"
+    state.passengerPresent -> "동승자 탑승 · 대화 멈춤"
     state.quietReason != null -> "조용히 · ${state.quietReason}"
+    state.quietMode -> "조용히 모드 · 짧게 확인만"
     state.accompanying -> "동행 중"
     else -> "대기"
 }
@@ -112,6 +127,7 @@ private fun StageCard(state: UiState, modifier: Modifier) {
             Text(
                 text = when {
                     state.napping -> "15분 뒤에 깨워 드릴게요"
+                    state.passengerPresent -> "동승자가 계셔서 조용히 있을게요"
                     state.quietReason != null -> "운전에 집중하실 때는 조용히 있을게요"
                     state.accompanying -> "옆자리가 함께하는 중"
                     else -> "고속 주행이 이어지면 함께해요"
@@ -147,6 +163,8 @@ private fun CopilotScreenPreview() {
         ),
         onLaneChange = {},
         onHardBrake = {},
+        onTogglePassenger = {},
+        onVehicleWarning = {},
         onParkForRest = {},
         onResumeDriving = {},
     )

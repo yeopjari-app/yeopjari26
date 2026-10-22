@@ -32,6 +32,7 @@ fun createPlatform(context: Context): Platform {
             normalIntervalMs = 15 * 60_000L,
             cautionIntervalMs = 5 * 60_000L,
             napMs = 15 * 60_000L,
+            quietModeMs = 30 * 60_000L,
         ),
         onRelease = {
             state.stop()
@@ -48,6 +49,8 @@ fun createPlatform(context: Context): Platform {
  *  (check…Capabilities → register… → unregister…)와 같다.
  *  - 차속(PERF_VEHICLE_SPEED, m/s → × 3.6) / 기어 선택(GEAR_SELECTION → P/R/N/D)  ← 필수
  *  - 방향지시등(TurnSignal 도메인) / 브레이크(Brake 도메인, 급제동 판단) / 조향각(SteeringWheel 도메인)
+ *  - 조수석 탑승 여부(Seat 또는 Safety 도메인의 탑승·안전벨트 정보)
+ *  - 운전자 주의 경고(Safety 도메인 / ADAS 상태, READ_ADAS_STATES 권한)
  *  연결 전까지는 값이 갱신되지 않아 동행이 시작되지 않는다.
  */
 private class PleosVehicleState(private val vehicle: Vehicle) : VehicleSource {
@@ -56,6 +59,8 @@ private class PleosVehicleState(private val vehicle: Vehicle) : VehicleSource {
     @Volatile private var turnSignalOn = false
     @Volatile private var hardBraking = false
     @Volatile private var steeringAngleDeg = 0f
+    @Volatile private var passengerPresent = false
+    @Volatile private var drowsinessWarning = false
 
     override val snapshots: Flow<VehicleSnapshot> = flow {
         start()
@@ -66,6 +71,8 @@ private class PleosVehicleState(private val vehicle: Vehicle) : VehicleSource {
                     turnSignalOn = turnSignalOn,
                     hardBraking = hardBraking,
                     steeringAngleDeg = steeringAngleDeg,
+                    passengerPresent = passengerPresent,
+                    drowsinessWarning = drowsinessWarning,
                 )
             )
             delay(1_000)
@@ -73,7 +80,7 @@ private class PleosVehicleState(private val vehicle: Vehicle) : VehicleSource {
     }
 
     private fun start() {
-        // TODO(pleos): 차속·기어·방향지시등·브레이크·조향각 리스너 등록
+        // TODO(pleos): 차속·기어·방향지시등·브레이크·조향각·조수석 탑승·운전자 주의 경고 리스너 등록
     }
 
     fun stop() {

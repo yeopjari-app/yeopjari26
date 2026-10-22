@@ -19,7 +19,8 @@ import kotlinx.coroutines.flow.flow
 
 /**
  * 시연 빌드: 실제 1초 = 가상 1분으로 압축한 고속도로 주행. 30초 뒤 동행이 시작된다.
- * 차선 변경·급제동 버튼으로 "바쁠 때 조용히" 동작을, 휴식 정차로 파워냅(15초)을 보여 준다.
+ * 차선 변경·급제동 버튼으로 "바쁠 때 조용히" 동작을, 동승자 버튼으로 "옆자리가 차면 물러나기"를,
+ * 차량 졸음 경고 버튼으로 차량 경고 연동을, 휴식 정차로 파워냅(15초)을 보여 준다.
  */
 fun createPlatform(context: Context): Platform {
     val drive = SimulatedDrive()
@@ -34,7 +35,12 @@ fun createPlatform(context: Context): Platform {
             override suspend fun reclineSeat() = true
             override suspend fun restoreSeat() = true
         },
-        config = CopilotConfig(normalIntervalMs = 20_000, cautionIntervalMs = 10_000, napMs = 15_000),
+        config = CopilotConfig(
+            normalIntervalMs = 20_000,
+            cautionIntervalMs = 10_000,
+            napMs = 15_000,
+            quietModeMs = 60_000,
+        ),
         demo = drive,
     )
 }
@@ -47,6 +53,8 @@ private class SimulatedDrive : VehicleSource, LocationSource, DemoControls {
     @Volatile private var position = GeoPoint(37.40, 127.10)
     @Volatile private var turnSignalUntil = 0L
     @Volatile private var hardBrakeUntil = 0L
+    @Volatile private var passenger = false
+    @Volatile private var warningUntil = 0L
     private var virtualTimeMs = System.currentTimeMillis()
     private var elapsedVirtualMs = 0L
 
@@ -61,6 +69,8 @@ private class SimulatedDrive : VehicleSource, LocationSource, DemoControls {
                     gear = gear,
                     turnSignalOn = now < turnSignalUntil,
                     hardBraking = now < hardBrakeUntil,
+                    passengerPresent = passenger,
+                    drowsinessWarning = now < warningUntil,
                 )
             )
             delay(tickMs)
@@ -89,6 +99,14 @@ private class SimulatedDrive : VehicleSource, LocationSource, DemoControls {
 
     override fun hardBrake() {
         hardBrakeUntil = SystemClock.elapsedRealtime() + 3_000
+    }
+
+    override fun togglePassenger() {
+        passenger = !passenger
+    }
+
+    override fun vehicleDrowsinessWarning() {
+        warningUntil = SystemClock.elapsedRealtime() + 2_000
     }
 
     override fun parkForRest() {
