@@ -13,6 +13,8 @@ data class CheckResult(val latencyMs: Long?, val correct: Boolean)
  * 최근 [windowSize] 회 합계가 [cautionScore] 이상이면 주의, [dangerScore] 이상이면 위험.
  * 처음 [calibrationSize] 회의 정답 응답은 속도를 판정하지 않고 기준선으로만 쓴다(보정).
  * 이후 기준선은 정상 범위의 정답 응답으로만 갱신해 졸린 상태가 기준선을 끌어올리지 않게 한다.
+ * [initialBaseline] 으로 지난 주행들에서 저장한 기준선을 이어 받으면 보정 없이 바로 판정하므로,
+ * "출발할 때부터 평소보다 느린 날"도 알아챈다.
  */
 class AlertnessEngine(
     private val baselineSize: Int = 10,
@@ -21,9 +23,14 @@ class AlertnessEngine(
     private val defaultBaselineMs: Long = 1_500,
     private val cautionScore: Int = 2,
     private val dangerScore: Int = 7,
+    initialBaseline: List<Long> = emptyList(),
 ) {
-    private val baseline = ArrayDeque<Long>()
+    private val baseline = ArrayDeque(initialBaseline.takeLast(baselineSize))
     private val scores = ArrayDeque<Int>()
+
+    /** 다음 주행에 이어 쓰도록 저장할 기준선 표본. */
+    val baselineSamples: List<Long>
+        get() = baseline.toList()
 
     var stage: AlertStage = AlertStage.NORMAL
         private set

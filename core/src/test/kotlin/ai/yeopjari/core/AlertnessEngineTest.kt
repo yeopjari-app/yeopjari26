@@ -60,4 +60,11 @@ class AlertnessEngineTest {
         repeat(3) { engine.record(CheckResult(1_000, correct = true)) }
         assertEquals(AlertStage.DANGER, engine.recordVehicleWarning())
     }
+
+    @Test
+    fun `지난 주행의 기준선을 이어 받으면 출발부터 느린 날을 알아챈다`() {
+        val engine = AlertnessEngine(initialBaseline = listOf(1_000, 1_000, 1_000))
+        assertEquals(AlertStage.CAUTION, engine.record(CheckResult(2_500, correct = true)))
+        assertEquals(listOf(1_000L, 1_000L, 1_000L), engine.baselineSamples)
+    }
 }

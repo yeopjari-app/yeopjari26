@@ -33,6 +33,9 @@ fun createPlatform(context: Context): Platform {
             cautionIntervalMs = 5 * 60_000L,
             napMs = 15 * 60_000L,
             quietModeMs = 30 * 60_000L,
+            // 1초마다 표본 → 처음 15분으로 이번 주행의 평소 조향을 정하고, 최근 1분을 본다
+            steeringBaselineSamples = 15 * 60,
+            steeringWindowSamples = 60,
         ),
         onRelease = {
             state.stop()
@@ -93,11 +96,15 @@ private class PleosVehicleState(private val vehicle: Vehicle) : VehicleSource {
  *  - [freshAir]: vehicle.getHVAC() 의 외기/내기 순환 API 로 외기 유입
  *  - [reclineSeat] / [restoreSeat]: vehicle.getSeat() 의 운전석 등받이 각도. 눕히기 전 각도를 저장했다가 되돌린다.
  *    P단 정차 중에만 호출된다.
+ *  - [wakeBurst]: HVAC 설정 온도 낮추기·풍량 올리기, Seat 통풍, Light 실내등 깜빡임 중 허용되는 것
+ *  - [hazardLights]: Light 도메인의 비상등
  */
 private class PleosCabinControl(private val vehicle: Vehicle) : CabinControl {
     override suspend fun freshAir(): Boolean = false
     override suspend fun reclineSeat(): Boolean = false
     override suspend fun restoreSeat(): Boolean = false
+    override suspend fun wakeBurst(): Boolean = false
+    override suspend fun hazardLights(on: Boolean): Boolean = false
 }
 
 /**

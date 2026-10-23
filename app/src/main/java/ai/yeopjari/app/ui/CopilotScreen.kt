@@ -48,6 +48,7 @@ fun CopilotScreen(
     onHardBrake: () -> Unit,
     onTogglePassenger: () -> Unit,
     onVehicleWarning: () -> Unit,
+    onWeave: () -> Unit,
     onParkForRest: () -> Unit,
     onResumeDriving: () -> Unit,
 ) {
@@ -83,6 +84,9 @@ fun CopilotScreen(
                         OutlinedButton(onClick = onVehicleWarning) { Text("차량 졸음 경고") }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(onClick = onWeave) { Text("차로 흔들림") }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Button(onClick = onParkForRest) { Text("휴식 정차") }
                         OutlinedButton(onClick = onResumeDriving) { Text("다시 출발") }
                     }
@@ -98,6 +102,7 @@ private fun statusText(state: UiState): String = when {
     state.passengerPresent -> "동승자 탑승 · 대화 멈춤"
     state.quietReason != null -> "조용히 · ${state.quietReason}"
     state.quietMode -> "조용히 모드 · 짧게 확인만"
+    state.weaving -> "조향 흔들림 · 곧 확인"
     state.accompanying -> "동행 중"
     else -> "대기"
 }
@@ -165,6 +170,7 @@ private fun CopilotScreenPreview() {
         onHardBrake = {},
         onTogglePassenger = {},
         onVehicleWarning = {},
+        onWeave = {},
         onParkForRest = {},
         onResumeDriving = {},
     )

@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
                     onHardBrake = viewModel::hardBrake,
                     onTogglePassenger = viewModel::togglePassenger,
                     onVehicleWarning = viewModel::vehicleDrowsinessWarning,
+                    onWeave = viewModel::weave,
                     onParkForRest = viewModel::parkForRest,
                     onResumeDriving = viewModel::resumeDriving,
                 )

@@ -21,12 +21,16 @@ interface Navigator {
 
 /**
  * 실내 제어. 지원하지 않는 기능은 false 를 돌려주고, 그때는 음성 안내로 대신한다.
- * 좌석 제어는 P단 정차 중 파워냅 모드에서만 쓴다.
+ * 좌석 눕히기는 P단 정차 중 파워냅 모드에서만 쓴다.
+ * 브레이크·조향·경적 같은 주행 제어는 여기에 두지 않는다. 그것은 차량 자체 안전 기능의 몫이다.
  */
 interface CabinControl {
     suspend fun freshAir(): Boolean
     suspend fun reclineSeat(): Boolean
     suspend fun restoreSeat(): Boolean
+    /** 깨우기: 찬 바람 · 통풍 시트 · 실내등 깜빡임 중 가능한 것. 하나라도 했으면 true. */
+    suspend fun wakeBurst(): Boolean
+    suspend fun hazardLights(on: Boolean): Boolean
 }
 
 /**
@@ -56,6 +60,7 @@ interface DemoControls {
     fun hardBrake()
     fun togglePassenger()
     fun vehicleDrowsinessWarning()
+    fun weave()
     fun parkForRest()
     fun resumeDriving()
 }
@@ -66,6 +71,8 @@ data class CopilotConfig(
     val cautionIntervalMs: Long,
     val napMs: Long,
     val quietModeMs: Long,
+    val steeringBaselineSamples: Int,
+    val steeringWindowSamples: Int,
     val listenTimeoutMs: Long = 8_000,
     val restStopRadiusKm: Double = 30.0,
 )

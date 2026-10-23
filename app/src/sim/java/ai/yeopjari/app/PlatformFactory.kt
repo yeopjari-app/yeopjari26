@@ -20,7 +20,8 @@ import kotlinx.coroutines.flow.flow
 /**
  * 시연 빌드: 실제 1초 = 가상 1분으로 압축한 고속도로 주행. 30초 뒤 동행이 시작된다.
  * 차선 변경·급제동 버튼으로 "바쁠 때 조용히" 동작을, 동승자 버튼으로 "옆자리가 차면 물러나기"를,
- * 차량 졸음 경고 버튼으로 차량 경고 연동을, 휴식 정차로 파워냅(15초)을 보여 준다.
+ * 차량 졸음 경고 버튼으로 차량 경고 연동을, 차로 흔들림 버튼으로 "확인 앞당기기"를,
+ * 휴식 정차로 파워냅(15초)을 보여 준다.
  */
 fun createPlatform(context: Context): Platform {
     val drive = SimulatedDrive()
@@ -34,12 +35,17 @@ fun createPlatform(context: Context): Platform {
             override suspend fun freshAir() = true
             override suspend fun reclineSeat() = true
             override suspend fun restoreSeat() = true
+            override suspend fun wakeBurst() = true
+            override suspend fun hazardLights(on: Boolean) = true
         },
         config = CopilotConfig(
             normalIntervalMs = 20_000,
             cautionIntervalMs = 10_000,
             napMs = 15_000,
             quietModeMs = 60_000,
+            // 0.5초마다 표본 → 30개 = 실제 15초(가상 15분), 최근 12개 = 실제 6초
+            steeringBaselineSamples = 30,
+            steeringWindowSamples = 12,
         ),
         demo = drive,
     )
@@ -55,6 +61,8 @@ private class SimulatedDrive : VehicleSource, LocationSource, DemoControls {
     @Volatile private var hardBrakeUntil = 0L
     @Volatile private var passenger = false
     @Volatile private var warningUntil = 0L
+    @Volatile private var weaveUntil = 0L
+    private var tick = 0
     private var virtualTimeMs = System.currentTimeMillis()
     private var elapsedVirtualMs = 0L
 
@@ -71,8 +79,10 @@ private class SimulatedDrive : VehicleSource, LocationSource, DemoControls {
                     hardBraking = now < hardBrakeUntil,
                     passengerPresent = passenger,
                     drowsinessWarning = now < warningUntil,
+                    steeringAngleDeg = steeringAngle(now),
                 )
             )
+            tick++
             delay(tickMs)
             val dtMs = tickMs * timeScale
             virtualTimeMs += dtMs
@@ -91,6 +101,12 @@ private class SimulatedDrive : VehicleSource, LocationSource, DemoControls {
         else -> 100f
     }
 
+    /** 평소엔 아주 작은 떨림, 흔들림 버튼을 누르면 10초 동안 좌우로 흔들렸다 바로잡기를 반복. */
+    private fun steeringAngle(now: Long): Float = when {
+        now < weaveUntil -> if (tick % 2 == 0) 6f else -6f
+        else -> (kotlin.math.sin(tick * 0.3) * 1.0).toFloat()
+    }
+
     override suspend fun current(): GeoPoint = position
 
     override fun laneChange() {
@@ -107,6 +123,10 @@ private class SimulatedDrive : VehicleSource, LocationSource, DemoControls {
 
     override fun vehicleDrowsinessWarning() {
         warningUntil = SystemClock.elapsedRealtime() + 2_000
+    }
+
+    override fun weave() {
+        weaveUntil = SystemClock.elapsedRealtime() + 10_000
     }
 
     override fun parkForRest() {

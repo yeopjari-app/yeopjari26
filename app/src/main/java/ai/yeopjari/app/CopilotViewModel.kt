@@ -12,6 +12,7 @@ import ai.yeopjari.core.DriveSessionTracker
 import ai.yeopjari.core.DriverIntent
 import ai.yeopjari.core.Gear
 import ai.yeopjari.core.QuestionBank
+import ai.yeopjari.core.SteeringMonitor
 import ai.yeopjari.core.VehicleSnapshot
 import ai.yeopjari.core.Workload
 import ai.yeopjari.core.WorkloadGate
@@ -21,6 +22,7 @@ import ai.yeopjari.core.isYes
 import ai.yeopjari.core.nearestRestStop
 import android.Manifest
 import android.app.Application
+import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -50,6 +52,7 @@ data class UiState(
     val quietReason: String? = null,
     val quietMode: Boolean = false,
     val passengerPresent: Boolean = false,
+    val weaving: Boolean = false,
     val napping: Boolean = false,
     val lastExchange: String = "",
     val log: List<String> = emptyList(),
@@ -61,12 +64,20 @@ data class UiState(
  * 차량 상태 → 동행 시작 → (운전이 바쁘지 않고 조수석이 비었을 때) 가벼운 대화 → 단계 판정 →
  * 개입(환기 · 휴식 장소 안내) → 정차 후 파워냅 → 재출발 확인으로 이어지는 흐름.
  * 운전자가 "피곤해"라고 하거나 차량의 운전자 주의 경고가 울리면 바로 휴식 장소를 안내한다.
+ * 조향이 평소보다 흔들리면 경고하지 않고 다음 확인을 앞당겨, 대답으로 확인한다.
+ * 대답 기준선은 주행이 끝나도 저장해 다음 주행에 이어 쓴다.
  */
 class CopilotViewModel(app: Application) : AndroidViewModel(app) {
     private val platform = createPlatform(app)
     private val voice = AndroidVoiceIO(app)
     private val restStops = RestStopRepository.load(app)
-    private val engine = AlertnessEngine()
+    private val prefs = app.getSharedPreferences("yeopjari", Context.MODE_PRIVATE)
+    private val savedBaseline = loadBaseline()
+    private val engine = AlertnessEngine(initialBaseline = savedBaseline)
+    private val steering = SteeringMonitor(
+        baselineSamples = platform.config.steeringBaselineSamples,
+        windowSamples = platform.config.steeringWindowSamples,
+    )
     private val questions = QuestionBank()
     private val tracker = DriveSessionTracker(hourOf = ::localHour)
     private val gate = WorkloadGate()
@@ -90,6 +101,11 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app) {
     private var conditionCheckPending = false
     private var freshAirOffered = false
     private var micWarned = false
+    private var weaving = false
+    private var earlyCheckRequested = false
+    private var checksThisTrip = 0
+    private var wakeLevel = 0
+    private var hazardOn = false
 
     init {
         viewModelScope.launch {
@@ -113,6 +129,10 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app) {
         platform.demo?.vehicleDrowsinessWarning()
     }
 
+    fun weave() {
+        platform.demo?.weave()
+    }
+
     fun parkForRest() {
         platform.demo?.parkForRest()
     }
@@ -128,15 +148,19 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app) {
         tracker.update(snapshot).forEach { event ->
             when (event) {
                 DriveEvent.Activated -> {
+                    checksThisTrip = 0
                     log("동행 시작 (고속 주행 ${tracker.highSpeedMs / 60_000}분)")
                     startLoop()
                 }
                 DriveEvent.Parked -> {
                     log("정차 감지")
+                    clearWake()
                     if (restSuggested || engine.stage != AlertStage.NORMAL) offerNap()
                 }
                 DriveEvent.RestCredited -> {
                     engine.resetAfterRest()
+                    steering.clearWindow()
+                    saveBaseline()
                     freshAirOffered = false
                     restSuggested = false
                     log("휴식 인정")
@@ -150,6 +174,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app) {
         }
         onPassengerChange(snapshot.passengerPresent)
         onVehicleWarning(snapshot.drowsinessWarning)
+        onSteering(snapshot)
         _ui.update {
             it.copy(
                 accompanying = tracker.active,
@@ -161,8 +186,20 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app) {
                 quietReason = busy.firstOrNull()?.label,
                 quietMode = inQuietMode(),
                 passengerPresent = passengerPresent,
+                weaving = weaving,
             )
         }
+    }
+
+    /** 조향 흔들림은 경고가 아니라 "지금 한 번 물어볼 때"라는 단서로만 쓴다. */
+    private fun onSteering(snapshot: VehicleSnapshot) {
+        if (!tracker.active || parked) return
+        val now = steering.update(snapshot.steeringAngleDeg)
+        if (now && !weaving && engine.stage == AlertStage.NORMAL) {
+            earlyCheckRequested = true
+            log("조향 흔들림 감지 → 확인을 앞당김")
+        }
+        weaving = now
     }
 
     /** 조수석에 사람이 타면 옆자리는 물러나고, 내리면 다시 함께한다. */
@@ -198,7 +235,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app) {
         loop = viewModelScope.launch {
             voiceLock.withLock { voice.speak("장거리 운전이네요. 옆자리가 함께할게요.") }
             while (isActive) {
-                delay(intervalFor(engine.stage))
+                waitForNextCheck(intervalFor(engine.stage))
                 if (parked || passengerPresent) continue
                 waitUntilNotBusy()
                 voiceLock.withLock {
@@ -210,6 +247,16 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
+    }
+
+    /** 다음 확인까지 기다리되, 조향 흔들림이 감지되면 바로 확인한다. */
+    private suspend fun waitForNextCheck(intervalMs: Long) {
+        var waited = 0L
+        while (waited < intervalMs && !earlyCheckRequested) {
+            delay(500)
+            waited += 500
+        }
+        earlyCheckRequested = false
     }
 
     /** 차선 변경·급제동 등 운전이 바쁜 동안은 말을 걸지 않고 기다린다. */
@@ -250,12 +297,17 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app) {
             }
             is ListenResult.Silent -> CheckResult(null, correct = false)
             // 다시 물어서야 대답했다면 그만큼 느린 대답으로 본다.
-            is ListenResult.Heard -> CheckResult(
-                latencyMs = if (retried) platform.config.listenTimeoutMs + result.latencyMs else result.latencyMs,
-                correct = isMeaningfulAnswer(result.text),
-            )
+            is ListenResult.Heard -> {
+                clearWake()
+                CheckResult(
+                    latencyMs = if (retried) platform.config.listenTimeoutMs + result.latencyMs else result.latencyMs,
+                    correct = isMeaningfulAnswer(result.text),
+                )
+            }
         }
         val stage = engine.record(check)
+        checksThisTrip++
+        saveBaseline()
         _ui.update {
             it.copy(
                 stage = stage,
@@ -278,11 +330,25 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app) {
             }
             DriverIntent.NONE -> Unit
         }
+        if (stage == AlertStage.CAUTION && checksThisTrip <= 3 && savedBaseline.isNotEmpty()) {
+            // 지난 주행의 평소 속도와 비교했기 때문에 알 수 있는 경우
+            voice.speak("오늘은 출발부터 평소보다 대답이 느리세요.")
+        }
         when (stage) {
             AlertStage.NORMAL -> Unit
             AlertStage.CAUTION -> offerFreshAir()
             AlertStage.DANGER -> offerRestStop()
         }
+    }
+
+    private fun loadBaseline(): List<Long> =
+        prefs.getString(KEY_BASELINE, null)
+            ?.split(",")
+            ?.mapNotNull { it.toLongOrNull() }
+            .orEmpty()
+
+    private fun saveBaseline() {
+        prefs.edit().putString(KEY_BASELINE, engine.baselineSamples.joinToString(",")).apply()
     }
 
     private suspend fun offerFreshAir() {
@@ -311,6 +377,10 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app) {
         val km = nearby.distanceKm.roundToInt().coerceAtLeast(1)
         voice.speak("${km}킬로미터 앞 ${nearby.stop.name}에 들를까요?")
         val answer = voice.listen(platform.config.listenTimeoutMs)
+        if (answer is ListenResult.Silent) {
+            wakeEscalation()
+            return
+        }
         if (!isYes(answer.text)) {
             voice.speak("알겠어요. 조금 뒤에 다시 여쭤볼게요.")
             log("휴식 제안 보류")
@@ -321,6 +391,40 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app) {
             voice.speak("${nearby.stop.name}은 ${km}킬로미터 앞이에요. 안내 표지판을 따라가 주세요.")
             log("경유지 추가 불가 — 음성 안내")
         }
+    }
+
+    /**
+     * 위험 단계에서 쉼터 제안에도 대답이 없으면, 앱에 허용된 차량 기능만으로 깨운다.
+     * 1단계: 알람음 + 찬 바람·통풍 시트·실내등. 2단계(그래도 무응답): 비상등 + 정차 안내.
+     * 브레이크·조향·경적은 쓰지 않는다. 앱에 열려 있지 않고, 차량 자체 안전 기능의 몫이다.
+     */
+    private fun wakeEscalation() {
+        wakeLevel++
+        viewModelScope.launch {
+            ring()
+            val burst = platform.cabin.wakeBurst()
+            log(if (burst) "깨우기 ${wakeLevel}단계: 알람·찬 바람·통풍 시트·실내등" else "깨우기 ${wakeLevel}단계: 알람")
+            voiceLock.withLock {
+                if (wakeLevel == 1) {
+                    voice.speak("일어나세요! 지금 바로 쉬어야 해요.")
+                } else {
+                    if (!hazardOn && platform.cabin.hazardLights(true)) {
+                        hazardOn = true
+                        log("비상등 켜짐")
+                    }
+                    voice.speak("비상등을 켰어요. 가장 가까운 안전한 곳에 차를 세워 주세요.")
+                }
+            }
+        }
+    }
+
+    /** 운전자가 대답하거나 차를 세우면 깨우기를 멈추고 비상등을 끈다. */
+    private fun clearWake() {
+        wakeLevel = 0
+        if (!hazardOn) return
+        hazardOn = false
+        viewModelScope.launch { platform.cabin.hazardLights(false) }
+        log("비상등 꺼짐")
     }
 
     /** 휴식 장소에 멈추면 15분 파워냅을 제안한다: 좌석 눕히기 → 환기 → 알람 → 좌석 원위치. */
@@ -381,8 +485,13 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        saveBaseline()
         voice.release()
         platform.release()
+    }
+
+    private companion object {
+        const val KEY_BASELINE = "answer_baseline_ms"
     }
 }
 
