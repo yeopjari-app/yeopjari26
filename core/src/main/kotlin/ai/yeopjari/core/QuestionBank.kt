@@ -2,8 +2,8 @@ package ai.yeopjari.core
 
 import kotlin.random.Random
 
-/** 음성 체크 한 번에 건넬 말. */
-class Question(val prompt: String)
+/** 음성 체크 한 번에 건넬 말. 주제 대화면 [topic] 이 있다. */
+class Question(val prompt: String, val topic: Topic? = null)
 
 /** 운전자가 고른 대화 주제. */
 enum class Topic { MUSIC, SPORTS, TRAVEL, FOOD }
@@ -36,9 +36,15 @@ class QuestionBank(
     fun next(nextRestStop: String? = null, checkInOnly: Boolean = false): Question {
         val roll = if (checkInOnly) 0 else random.nextInt(3)
         if (roll == 0) return Question(checkIns[random.nextInt(checkIns.size)])
-        if (nextRestStop != null && roll == 1) return Question("곧 ${nextRestStop}이 나와요. 들러 보신 적 있으세요?")
-        val pool = topics.flatMap { chats.getValue(it) }.ifEmpty { checkIns }
-        return Question(pool[random.nextInt(pool.size)])
+        if (nextRestStop != null && roll == 1) return Question("곧 ${particle(nextRestStop, "이", "가")} 나와요. 들러 보신 적 있으세요?")
+        return chat()
+    }
+
+    /** 고른 주제 안의 가벼운 대화 한마디. 고른 주제가 없으면 확인 멘트. */
+    fun chat(): Question {
+        val pool = topics.flatMap { topic -> chats.getValue(topic).map { Question(it, topic) } }
+        if (pool.isEmpty()) return Question(checkIns[random.nextInt(checkIns.size)])
+        return pool[random.nextInt(pool.size)]
     }
 }
 

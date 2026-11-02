@@ -10,6 +10,7 @@ class DriverIntentTest {
         assertEquals(DriverIntent.TIRED, detectIntent("좀 피곤하네"))
         assertEquals(DriverIntent.TIRED, detectIntent("졸려"))
         assertEquals(DriverIntent.TIRED, detectIntent("쉬고 싶어"))
+        assertEquals(DriverIntent.TIRED, detectIntent("좀 졸린데"))
     }
 
     @Test
@@ -21,6 +22,13 @@ class DriverIntentTest {
     @Test
     fun `둘 다 있으면 피곤함이 먼저`() {
         assertEquals(DriverIntent.TIRED, detectIntent("피곤하니까 조용히 해"))
+    }
+
+    @Test
+    fun `재밌는 얘기를 청하는 말`() {
+        assertEquals(DriverIntent.STORY, detectIntent("재밌는 얘기 해 줘"))
+        assertEquals(DriverIntent.STORY, detectIntent("아 심심해"))
+        assertEquals(DriverIntent.TIRED, detectIntent("졸린데 재밌는 얘기 해 줘"))
     }
 
     @Test

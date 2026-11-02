@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 옆자리 마크: 마주 보는 두 호(나란히 앉은 두 사람) 사이에 음성 막대 세 개 = 먼저 말을 거는 동승자 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M48,40.8a20.4,20.4 0,0 0,0 40.8" android:strokeWidth="6" android:strokeLineCap="round" android:fillColor="#00000000">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="48" android:startY="40.8" android:endX="48" android:endY="81.6">
+                <item android:offset="0" android:color="#FF5A6476"/>
+                <item android:offset="1" android:color="#FF2C333F"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M60,40.8a20.4,20.4 0,0 1,0 40.8" android:strokeWidth="6" android:strokeLineCap="round" android:fillColor="#00000000">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="60" android:startY="40.8" android:endX="80.4" android:endY="81.6">
+                <item android:offset="0" android:color="#FFE6F9FF"/>
+                <item android:offset="0.4" android:color="#FF6FD3FF"/>
+                <item android:offset="0.8" android:color="#FF3B7BFF"/>
+                <item android:offset="1" android:color="#FF7A5CFF"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M62.1,43.2a18,18 0,0 1,10.2 7.8" android:strokeColor="#80FFFFFF" android:strokeWidth="1.2" android:strokeLineCap="round" android:fillColor="#00000000"/>
+    <path android:pathData="M49.8,50.4v7.2M54,45.6v16.8M58.2,50.4v7.2" android:strokeWidth="3.3" android:strokeLineCap="round" android:fillColor="#00000000">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="54" android:startY="45.6" android:endX="54" android:endY="62.4">
+                <item android:offset="0" android:color="#FFDFF7FF"/>
+                <item android:offset="0.5" android:color="#FF5CC6FF"/>
+                <item android:offset="1" android:color="#FF3A63FF"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

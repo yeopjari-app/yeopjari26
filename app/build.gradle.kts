@@ -6,6 +6,10 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Pleos 빌드는 Pleos 전용 저장소에서 Vehicle SDK 를 받아야 한다. 그 저장소에 닿지 않는 환경에서도
+// 시연 빌드가 막히지 않도록, gradle.properties 에 yeopjari.pleos=true 가 있을 때만 pleos 빌드를 만든다.
+val pleosEnabled = providers.gradleProperty("yeopjari.pleos").orNull == "true"
+
 // 릴리스 서명: keystore.properties 가 있으면 사용하고, 없으면 디버그 키로 서명해 바로 설치할 수 있게 한다.
 val keystoreProps = Properties().apply {
     val file = rootProject.file("keystore.properties")
@@ -44,8 +48,10 @@ android {
             versionNameSuffix = "-sim"
         }
         // Pleos Connect 에뮬레이터·차량에서 Vehicle SDK 로 실제 차량 상태를 읽는다.
-        create("pleos") {
-            dimension = "platform"
+        if (pleosEnabled) {
+            create("pleos") {
+                dimension = "platform"
+            }
         }
     }
 
@@ -63,6 +69,12 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        // Robolectric 이 테스트 중 내려받는 Android 런타임(android-all)의 저장소. 기본 주소가 막힌 환경을 위해 Maven Central 의 repo1 로 둔다.
+        unitTests.all { it.systemProperty("robolectric.dependency.repo.url", "https://repo1.maven.org/maven2") }
+    }
+
     buildFeatures {
         compose = true
     }
@@ -70,7 +82,20 @@ android {
 
 dependencies {
     implementation(project(":core"))
-    "pleosImplementation"(libs.vehicle.sdk)
+
+    // 시연 빌드 스모크 테스트(Robolectric 으로 실제 화면을 띄운다)
+    "testSimImplementation"(libs.junit)
+    "testPleosImplementation"(libs.junit)
+    "testSimImplementation"(libs.robolectric)
+    "testSimImplementation"(libs.androidx.test.core)
+    "testSimImplementation"(platform(libs.androidx.compose.bom))
+    "testSimImplementation"(libs.androidx.ui.test.junit4)
+    debugImplementation(libs.androidx.ui.test.manifest)
+    if (pleosEnabled) {
+        "pleosImplementation"(libs.vehicle.sdk)
+        "pleosImplementation"(libs.fused.location.sdk)
+        "pleosImplementation"(libs.navi.helper.sdk)
+    }
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

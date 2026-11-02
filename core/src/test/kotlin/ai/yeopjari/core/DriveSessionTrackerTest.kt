@@ -56,4 +56,29 @@ class DriveSessionTrackerTest {
         assertEquals(listOf(DriveEvent.Parked), events)
         assertTrue(t.drivingMs > 0)
     }
+
+    @Test
+    fun `목적지가 멀면 출발 5분 만에 시작한다`() {
+        val t = tracker()
+        val events = (0..5).flatMap { t.update(VehicleSnapshot(it * MINUTE, 40f, Gear.DRIVE), longTripAhead = true) }
+        assertEquals(listOf(DriveEvent.Activated), events)
+        assertEquals(ActivationReason.LONG_TRIP, t.activationReason)
+    }
+
+    @Test
+    fun `가까운 목적지면 시내 주행만으로는 시작하지 않는다`() {
+        val t = tracker()
+        (0..60).forEach { t.update(VehicleSnapshot(it * MINUTE, 40f, Gear.DRIVE), longTripAhead = false) }
+        assertFalse(t.active)
+    }
+
+    @Test
+    fun `운전자가 부르면 바로 시작하고 두 번 시작하지 않는다`() {
+        val t = tracker()
+        assertTrue(t.requestActivation(ActivationReason.REQUESTED))
+        assertTrue(t.active)
+        assertFalse(t.requestActivation(ActivationReason.VEHICLE_WARNING))
+        assertEquals(ActivationReason.REQUESTED, t.activationReason)
+        assertTrue(t.run(0, 40, 100f, Gear.DRIVE).none { it == DriveEvent.Activated })
+    }
 }

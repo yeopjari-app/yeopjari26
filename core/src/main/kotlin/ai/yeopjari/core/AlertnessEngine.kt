@@ -9,7 +9,7 @@ data class CheckResult(val latencyMs: Long?, val correct: Boolean)
 /**
  * 응답 지연·정답 여부를 운전자 본인의 평소 응답 속도(기준선)와 비교해 각성 단계를 판정한다.
  *
- * 체크마다 점수를 매기고(무응답 4, 기준선의 2배 이상 2, 1.5배 이상 1, 오답 +1),
+ * 체크마다 점수를 매기고(무응답 5, 기준선의 2배 이상 2, 1.5배 이상 1, 오답 +1),
  * 최근 [windowSize] 회 합계가 [cautionScore] 이상이면 주의, [dangerScore] 이상이면 위험.
  * 처음 [calibrationSize] 회의 정답 응답은 속도를 판정하지 않고 기준선으로만 쓴다(보정).
  * 이후 기준선은 정상 범위의 정답 응답으로만 갱신해 졸린 상태가 기준선을 끌어올리지 않게 한다.
@@ -73,7 +73,7 @@ class AlertnessEngine(
     }
 
     private fun score(result: CheckResult, judgeSpeed: Boolean): Int {
-        val latency = result.latencyMs ?: return 4
+        val latency = result.latencyMs ?: return 5
         val ratio = latency.toDouble() / baselineMs
         val slowness = when {
             !judgeSpeed -> 0

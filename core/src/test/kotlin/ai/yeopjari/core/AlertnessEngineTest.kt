@@ -20,6 +20,18 @@ class AlertnessEngineTest {
     }
 
     @Test
+    fun `시연 영상 시나리오 - 2점5초는 주의, 이어서 다시 불러도 무응답이면 위험`() {
+        val engine = AlertnessEngine()
+        listOf(1_200L, 1_300L, 1_100L).forEach { engine.record(CheckResult(it, correct = true)) }
+        assertEquals(AlertStage.NORMAL, engine.record(CheckResult(1_100, correct = true)))
+        assertEquals(1_200, engine.baselineMs)
+        // 오전 2:13, 대답 2.5초 = 평소의 2.1배 → 주의
+        assertEquals(AlertStage.CAUTION, engine.record(CheckResult(2_500, correct = true)))
+        // 오전 2:14, "내 말 들려?"까지 대답 없음 → 위험
+        assertEquals(AlertStage.DANGER, engine.record(CheckResult(null, correct = false)))
+    }
+
+    @Test
     fun `한 번 놓친 응답은 위험이 아니라 주의`() {
         val engine = AlertnessEngine()
         repeat(3) { engine.record(CheckResult(1_000, correct = true)) }
