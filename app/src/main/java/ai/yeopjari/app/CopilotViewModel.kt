@@ -916,8 +916,16 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
             coroutineScope {
                 val micOk = micUsable()
                 val heard = async {
-                    if (micOk) voice.listen(platform.config.listenTimeoutMs)
-                    else { delay(platform.config.listenTimeoutMs); if (screenReplyProven()) ListenResult.Silent else ListenResult.Unavailable }
+                    val r = if (micOk) voice.listen(platform.config.listenTimeoutMs) else null
+                    if (r != null && r !is ListenResult.Unavailable) r
+                    else {
+                        // 목소리를 못 쓰면(마이크 없음·인식기가 바로 오류) 듣는 시간이 끝날 때까지 화면 대답을 기다린다.
+                        // 인식 오류로 바로 끝내면 빠른 대답이 뜨자마자 사라져 누를 수 없다.
+                        val left = platform.config.listenTimeoutMs - (SystemClock.elapsedRealtime() - startedAt)
+                        if (left > 0) delay(left)
+                        // 음악 때문에 못 들은 경우는 무응답으로 치지 않는다.
+                        if (screenReplyProven() && (r == null || !mediaNow().playing)) ListenResult.Silent else ListenResult.Unavailable
+                    }
                 }
                 select {
                     heard.onAwait { it }

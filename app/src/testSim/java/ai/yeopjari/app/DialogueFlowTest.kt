@@ -51,7 +51,7 @@ import java.time.Duration
 @Config(sdk = [34])
 class DialogueFlowTest {
     /** 운전자 대본: 지금 대답하는 방식. */
-    private enum class Reply { FAST, SLOW, SILENT }
+    private enum class Reply { FAST, SLOW, SILENT, ERROR }
 
     private class FakeVoice : VoiceIO {
         var reply = Reply.FAST
@@ -71,6 +71,8 @@ class DialogueFlowTest {
             Reply.FAST -> { delay(900); ListenResult.Heard("응 좋아", 900) }
             Reply.SLOW -> { delay(3_500); ListenResult.Heard("응 좋아", 3_500) }
             Reply.SILENT -> { delay(timeoutMs); ListenResult.Silent }
+            // 인식기가 바로 오류를 내는 에뮬레이터(네트워크·언어 팩 없음 등)
+            Reply.ERROR -> { delay(100); ListenResult.Unavailable }
         }
         override fun release() = Unit
     }
@@ -414,6 +416,19 @@ class DialogueFlowTest {
         assertTrue("다시 물음", runUntil(120) { said("제 말 들리세요?") })
         assertTrue("위험", runUntil(240) { vm.ui.value.stage == AlertStage.DANGER })
         assertTrue("깨우기", runUntil(60) { "wakeBurst" in cabin.calls })
+    }
+
+    @Test
+    fun `인식기가 바로 오류를 내도 듣는 시간 동안 화면 대답을 받고, 그 뒤 대답이 없으면 무응답으로 본다`() {
+        voice.reply = Reply.ERROR
+        val vm = start(allow = true, demo = true)
+        assertTrue(runUntil(30) { vm.ui.value.accompanying })
+        assertTrue("듣는 중", runUntil(120) { vm.ui.value.listening })
+        run(3)
+        assertTrue("오류가 나도 빠른 대답을 누를 시간이 남는다", vm.ui.value.listening)
+        vm.quickReply("응")
+        assertTrue("대답으로 기록", runUntil(10) { vm.ui.value.chat.any { it.fromDriver && it.text == "응" } })
+        assertTrue("화면 대답을 멈추면 다시 물음", runUntil(120) { said("제 말 들리세요?") })
     }
 
     @Test

@@ -20,6 +20,10 @@ import androidx.compose.animation.AnimatedVisibility
 import kotlin.math.min
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -107,6 +111,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -246,7 +251,20 @@ fun CopilotScreen(state: UiState, actions: CopilotActions) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(P.bgTop, P.bgBottom)))) {
         val (wide, scale) = layoutScale(maxWidth.value, maxHeight.value)
         val base = LocalDensity.current
-        CompositionLocalProvider(LocalDensity provides Density(base.density * scale, base.fontScale)) {
+        // 화면을 줄여 그리면(배율 1 미만) 48dp 도 실제로는 작아진다. 누르는 영역은 실제 48dp 가 되도록 그만큼 키운다
+        // (Material 최소 크기와, 작은 버튼의 누르는 영역을 넓혀 주는 최소 터치 크기 둘 다).
+        val touch = touchTargetDp(scale).dp
+        val baseConfig = LocalViewConfiguration.current
+        val config = remember(baseConfig, touch) {
+            object : ViewConfiguration by baseConfig {
+                override val minimumTouchTargetSize = DpSize(touch, touch)
+            }
+        }
+        CompositionLocalProvider(
+            LocalDensity provides Density(base.density * scale, base.fontScale),
+            LocalMinimumInteractiveComponentSize provides touch,
+            LocalViewConfiguration provides config,
+        ) {
             ProvideTextStyle(TextStyle(fontFamily = WantedSans, color = P.text)) {
                 Box(Modifier.fillMaxSize().clip(WindowShape)) {
                     if (wide) WideLayout(state, actions, tone, clock, typing, onFamily = { editingPhone = true }, onVoice = { pickingVoice = true })
@@ -282,6 +300,9 @@ private const val MAX_SCALE = 3f
  * 창 크기(dp)로 배치와 배율을 정한다. 넓은 배치는 가로 창이 [WIDE_MIN_DP] 이상이고 [MIN_SCALE] 로 줄여도 다 들어갈 때만.
  * 배율은 늘 유한한 값이고 [MIN_SCALE]..[MAX_SCALE] 로 자른다(크기가 0이거나 무한대인 측정에서도 깨지지 않게).
  */
+/** 배율 [scale] 로 그릴 때 실제 48dp 가 되는 누르는 영역(그리는 단위 dp). 키울 때는 그대로 48. */
+internal fun touchTargetDp(scale: Float): Float = 48f / scale.coerceAtMost(1f)
+
 internal fun layoutScale(widthDp: Float, heightDp: Float): Pair<Boolean, Float> {
     fun safe(v: Float) = if (v.isFinite() && v > 0f) v.coerceIn(MIN_SCALE, MAX_SCALE) else 1f
     val wideFit = min(widthDp / WIDE_W, heightDp / WIDE_H)
@@ -405,13 +426,13 @@ private fun QuickReplies(actions: CopilotActions, typing: MutableState<String>) 
                 cursorBrush = Brush.verticalGradient(listOf(P.cyan, P.cyan)),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = KeyboardActions(onSend = { send() }),
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).background(P.chip).border(1.dp, P.stroke, RoundedCornerShape(12.dp))
+                modifier = Modifier.weight(1f).heightIn(min = LocalMinimumInteractiveComponentSize.current).clip(RoundedCornerShape(12.dp)).background(P.chip).border(1.dp, P.stroke, RoundedCornerShape(12.dp))
                     .semantics { contentDescription = "직접 입력해 대답하기" }
                     .padding(horizontal = 12.dp, vertical = 13.dp),
                 decorationBox = { inner -> Box { if (typing.value.isEmpty()) Text("직접 입력해 대답하기", fontSize = 14.sp, color = P.sub); inner() } },
             )
             Box(
-                Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).background(P.blue)
+                Modifier.heightIn(min = LocalMinimumInteractiveComponentSize.current).clip(RoundedCornerShape(12.dp)).background(P.blue)
                     .clickable(role = Role.Button) { send() }.padding(horizontal = 14.dp),
                 contentAlignment = Alignment.Center,
             ) { Text("보내기", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White) }
@@ -419,7 +440,8 @@ private fun QuickReplies(actions: CopilotActions, typing: MutableState<String>) 
     }
 }
 
-private val QUICK_REPLIES = listOf("응, 괜찮아", "피곤해", "조용히 해 줘", "재밌는 얘기 해 줘", "어, 해 봐")
+/** "응"은 제안("들를까요?"·"눈 붙이고 가실래요?")에 그렇다고 하는 대답. "응, 괜찮아"는 "괜찮아"가 들어 있어 제안에는 거절로 읽힌다. */
+private val QUICK_REPLIES = listOf("응", "응, 괜찮아", "피곤해", "조용히 해 줘", "재밌는 얘기 해 줘", "어, 해 봐")
 
 /**
  * 오늘의 졸음 예보(출발할 때 잠 질문에 답하면 그려진다). 가로축은 출발 뒤 시간, 세로축은 KSS 5~9.
@@ -1049,6 +1071,7 @@ private fun RestChip(text: String, ok: Boolean) {
 // ---------- 파워냅 ----------
 
 /** 낮잠 중 본문: 보라 그라디언트 링 카운트다운과 지금 해 둔 일들. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NapView(state: UiState) {
     val ends = state.napEndsAtMs
@@ -1082,7 +1105,12 @@ private fun NapView(state: UiState) {
             Text("남음", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = P.sub)
         }
     }
-    Row(Modifier.padding(top = 26.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // 가족 문자 칩까지 붙으면 넓은 배치의 왼쪽 칸보다 길어진다: 잘리지 않게 줄을 바꾼다.
+    FlowRow(
+        Modifier.padding(top = 26.dp, start = 8.dp, end = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         NapChip("좌석 눕힘", ok = false)
         NapChip("환기", ok = false)
         NapChip("알람", ok = false)
@@ -1177,7 +1205,7 @@ private fun ActionRow(state: UiState, actions: CopilotActions, onFamily: () -> U
 @Composable
 private fun Pill(text: String, primary: Boolean = false, onClick: () -> Unit) {
     Box(
-        Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).background(if (primary) P.blue else P.panelHi)
+        Modifier.heightIn(min = LocalMinimumInteractiveComponentSize.current).clip(RoundedCornerShape(14.dp)).background(if (primary) P.blue else P.panelHi)
             .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 18.dp, vertical = 11.dp),
         contentAlignment = Alignment.Center,
     ) { Text(text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1) }
@@ -1209,7 +1237,8 @@ private fun DemoRow(state: UiState, actions: CopilotActions) {
 @Composable
 private fun SmallPill(text: String, onClick: () -> Unit) {
     // 보이는 테두리는 작게 두고, 누르는 영역은 48dp 를 보장한다.
-    Box(Modifier.minimumInteractiveComponentSize().clickable(role = Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
+    val touch = LocalMinimumInteractiveComponentSize.current
+    Box(Modifier.clickable(role = Role.Button, onClick = onClick).sizeIn(minWidth = touch, minHeight = touch), contentAlignment = Alignment.Center) {
         Text(
             text, fontSize = 12.sp, color = P.sub, maxLines = 1,
             modifier = Modifier.border(1.dp, P.stroke, RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 6.dp),
@@ -1335,7 +1364,7 @@ private fun PersonaDialog(current: Persona, onDone: (Persona?) -> Unit) {
                     Row(
                         Modifier.fillMaxWidth()
                             .background(if (p == current) P.option else Color.Transparent, RoundedCornerShape(12.dp))
-                            .clickable(role = Role.Button) { onDone(p) }.heightIn(min = 48.dp).padding(12.dp),
+                            .clickable(role = Role.Button) { onDone(p) }.heightIn(min = LocalMinimumInteractiveComponentSize.current).padding(12.dp),
                     ) {
                         Column {
                             Text(p.label, fontSize = 17.sp, fontWeight = FontWeight.Bold)

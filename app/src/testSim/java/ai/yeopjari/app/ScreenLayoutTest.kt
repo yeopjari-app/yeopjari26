@@ -65,6 +65,12 @@ class ScreenLayoutTest {
         if (wide) compose.onNodeWithText("오늘의 졸음 예보").assertExists()
         // 창 오른쪽 아래 구석까지 앱 배경으로 채워졌는지(작은 기둥처럼 가운데만 그리지 않는지)
         assertTrue(bmp.width > 0 && bmp.height > 0)
+        // 화면을 줄여 그려도 버튼의 누르는 영역은 실제 48dp 이상
+        val density = compose.activity.resources.displayMetrics.density
+        for (label in listOf("재밌는 얘기", "차선 변경")) {
+            val h = compose.onNodeWithText(label).fetchSemanticsNode().size.height / density
+            assertTrue("$name · $label 누르는 높이 ${h}dp", h >= 47.5f)
+        }
     }
 
     @Test @Config(sdk = [34], qualifiers = "w1920dp-h1080dp-land-mdpi")
