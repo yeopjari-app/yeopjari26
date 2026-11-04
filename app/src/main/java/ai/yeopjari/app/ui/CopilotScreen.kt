@@ -181,8 +181,8 @@ private object P {
     val cold = Color(0xFF5FD4FF)
 }
 
-/** 머리글 글자표(워드마크): 고운돋움(SIL OFL 1.1, assets/licenses/GowunDodum-OFL.txt). 워드마크 글자만 담은 부분 글꼴. */
-private val GowunDodum = FontFamily(Font(R.font.gowun_dodum_wordmark, FontWeight.Normal))
+/** 머리글 글자표(워드마크): Pretendard SemiBold(SIL OFL 1.1, assets/licenses/Pretendard-OFL.txt). 워드마크 글자만 담은 부분 글꼴. */
+private val Wordmark = FontFamily(Font(R.font.pretendard_wordmark, FontWeight.SemiBold))
 
 private val WantedSans = FontFamily(
     Font(R.font.wanted_sans_regular, FontWeight.Normal),
@@ -487,7 +487,7 @@ private fun Header(state: UiState, tone: Tone, clock: State<Float>, onVoice: () 
         Box(Modifier.size(32.dp).clip(RoundedCornerShape(9.dp)).background(Color(0xFF0B0E14)), contentAlignment = Alignment.Center) {
             Image(painterResource(R.drawable.ic_launcher_foreground), contentDescription = null, modifier = Modifier.requiredSize(48.dp))
         }
-        Text("옆자리", fontFamily = GowunDodum, fontSize = 22.sp, maxLines = 1, modifier = Modifier.semantics { contentDescription = "옆자리" })
+        Text("옆자리", fontFamily = Wordmark, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, maxLines = 1, modifier = Modifier.semantics { contentDescription = "옆자리" })
         Box(
             Modifier.minimumInteractiveComponentSize()
                 .clip(CircleShape)
