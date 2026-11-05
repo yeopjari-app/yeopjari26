@@ -7,6 +7,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -24,6 +26,11 @@ class MainActivity : ComponentActivity() {
     ) { viewModel.refreshVoiceStatus() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // 어느 Android 버전에서도 같게: 배경은 화면 끝까지, 상태 표시줄 글자는 밝게(어두운 배경). 내용 여백은 CopilotScreen 이 맞춘다.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
         super.onCreate(savedInstanceState)
         // 처음 열 때 한 번만, 아직 없는 권한만 묻는다(화면을 돌릴 때마다 다시 묻지 않는다).
         // 이 빌드의 매니페스트에 없는 권한(가상 주행 빌드의 위치 권한 등)은 묻지 않는다.

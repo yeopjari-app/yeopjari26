@@ -27,6 +27,9 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -248,7 +251,13 @@ fun CopilotScreen(state: UiState, actions: CopilotActions) {
     }
     val clock = rememberClock()
     val tone = toneOf(state)
-    BoxWithConstraints(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(P.bgTop, P.bgBottom)))) {
+    // 배경은 화면 끝까지 칠하고, 내용은 상태 표시줄·내비게이션 바·카메라 홈을 피해 그린다
+    // (Android 15 부터 targetSdk 35 앱은 화면 끝까지 그려지므로, 이게 없으면 머리글과 아래 버튼 줄이 가려진다).
+    BoxWithConstraints(
+        Modifier.fillMaxSize()
+            .background(Brush.verticalGradient(listOf(P.bgTop, P.bgBottom)))
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+    ) {
         val (wide, scale) = layoutScale(maxWidth.value, maxHeight.value)
         val base = LocalDensity.current
         // 화면을 줄여 그리면(배율 1 미만) 48dp 도 실제로는 작아진다. 누르는 영역은 실제 48dp 가 되도록 그만큼 키운다

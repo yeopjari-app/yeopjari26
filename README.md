@@ -7,7 +7,7 @@
 
 <p align="center"><b>졸음을 경고하는 앱이 아니라, 졸음이 오기 전에 말을 걸고 쉬는 것까지 챙기는 차량용 음성 동승자</b></p>
 
-<p align="center">Pleos Connect 앱 · 팀 쉼표(Swimpyo) · Android (Kotlin, Jetpack Compose)</p>
+<p align="center">Pleos Connect 앱 · Android (Kotlin, Jetpack Compose)</p>
 
 ## 한눈에
 
@@ -24,7 +24,7 @@
 
 ## 심사위원용 빠른 시작 (약 3분)
 
-1. **설치** — `apk/Swimpyo_Yeopjari_release.apk` 를 Android 에뮬레이터(API 28 이상)나 휴대폰에 끌어다 놓거나 `adb install apk/Swimpyo_Yeopjari_release.apk`.
+1. **설치** — `apk/Yeopjari_release.apk` 를 Android 에뮬레이터(API 28 이상)나 휴대폰에 끌어다 놓거나 `adb install apk/Yeopjari_release.apk`.
 2. **열기** — "옆자리"를 열고 마이크 권한을 허용합니다. 약 5초 뒤 가상 고속도로 주행(실제 1초 = 가상 1분)과 함께 동행이 시작됩니다. 바로 보려면 **같이 가기**.
    - 가로 화면에서 영상과 같은 세 칸 배치가 됩니다(에뮬레이터는 가로로 돌리거나 태블릿 AVD 권장).
    - 시연 빌드는 기다리지 않도록 시간을 줄였습니다: 20초마다 말을 걸고, 파워냅 15초(실제 15분), "조용히 해 줘" 1분(새벽·장시간 운전 30초 · 실제 20분/10분), 정차 10초면 휴식 인정(실제 10분).
@@ -57,8 +57,8 @@
 
 | 파일 | 용도 |
 |---|---|
-| [`apk/Swimpyo_Yeopjari_release.apk`](apk/Swimpyo_Yeopjari_release.apk) (약 24MB) | **시연 빌드** — 일반 Android 휴대폰·에뮬레이터(API 28 이상)에서 가상 주행으로 전체 흐름 확인. **심사용** |
-| [`apk/Swimpyo_Yeopjari_pleos_release.apk`](apk/Swimpyo_Yeopjari_pleos_release.apk) (약 28MB) | **Pleos 빌드** — Pleos Connect 기기·에뮬레이터 전용, 실제 차량 신호·제어 사용 |
+| [`apk/Yeopjari_release.apk`](apk/Yeopjari_release.apk) (약 24MB) | **시연 빌드** — 일반 Android 휴대폰·에뮬레이터(API 28 이상)에서 가상 주행으로 전체 흐름 확인. **심사용** |
+| [`apk/Yeopjari_pleos_release.apk`](apk/Yeopjari_pleos_release.apk) (약 28MB) | **Pleos 빌드** — Pleos Connect 기기·에뮬레이터 전용, 실제 차량 신호·제어 사용 |
 
 두 파일 모두 공모전 시연용으로 Android 디버그 인증서로 서명했습니다. 배포 시 정식 인증서로 다시 서명합니다.
 
@@ -193,4 +193,4 @@ app/    Android 앱 (Jetpack Compose)
 
 ---
 
-팀 쉼표(Swimpyo) · 현대자동차그룹 차량용 앱 개발 공모전 출품작
+옆자리 · 현대자동차그룹 차량용 앱 개발 공모전 출품작
