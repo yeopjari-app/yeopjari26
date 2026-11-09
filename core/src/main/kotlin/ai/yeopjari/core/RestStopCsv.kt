@@ -55,7 +55,8 @@ object RestStopCsv {
                 return@mapIndexedNotNull null
             }
             val rawDirection = cell(direction)
-            val dest = if (kind == RestStopKind.SERVICE_AREA) Destinations.fromServiceAreaName(n) else Destinations.fromShelterDirection(rawDirection)
+            val dest = (if (kind == RestStopKind.SERVICE_AREA) Destinations.fromServiceAreaName(n) else Destinations.fromShelterDirection(rawDirection))
+                ?.takeUnless { it == "양방향" }
             RestStop(
                 id = "${if (kind == RestStopKind.SERVICE_AREA) "sa" else "ds"}-${i + 1}",
                 name = spokenName(n, kind),

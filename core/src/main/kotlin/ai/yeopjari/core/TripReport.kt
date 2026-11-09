@@ -127,7 +127,11 @@ val WakeAction.label: String
         WakeAction.FAMILY_ALERT -> "가족 연락"
     }
 
-private fun seconds(ms: Long): String = "%.1f초".format(ms / 1000.0)
+private fun seconds(ms: Long): String = String.format(java.util.Locale.KOREA, "%.1f초", ms / 1000.0)
 
-private fun duration(minutes: Int): String =
-    if (minutes >= 60) "${minutes / 60}시간 ${minutes % 60}분" else "${minutes}분"
+internal fun duration(minutes: Int): String =
+    when {
+        minutes < 60 -> "${minutes}분"
+        minutes % 60 == 0 -> "${minutes / 60}시간"
+        else -> "${minutes / 60}시간 ${minutes % 60}분"
+    }

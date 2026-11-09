@@ -48,7 +48,7 @@ class QuestionBank(
     }
 }
 
-private val FILLERS = setOf("음", "어", "으음", "아", "흠", "그")
+private val FILLERS = setOf("음", "어", "으음", "아", "흠", "그", "으", "아아", "어어", "음음", "흠흠", "에", "엄")
 
 /** "음…", "어" 같은 머뭇거림만 있으면 대답으로 보지 않는다. */
 fun isMeaningfulAnswer(text: String?): Boolean {

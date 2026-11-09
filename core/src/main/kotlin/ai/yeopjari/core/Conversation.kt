@@ -98,7 +98,7 @@ private val COFFEE_HOOKED = Regex("못\\s?끊|없으면\\s*안|없으면\\s*못|
 /** "커피 안 마시면 졸려" 처럼 조건으로 쓴 부정("…면")은 거절이 아니다. */
 private val COFFEE_CONDITIONAL = Regex("(안|못)\\s?마시면")
 private val COFFEE_NOT = Regex("(커피|아메리카노|라떼|카페인)\\s*말고")
-private val CLAUSE_SPLIT = Regex("고\\s+|,|지만|는데|그리고|[.!?]")
+private val CLAUSE_SPLIT = Regex("고\\s+|,|지만|[는은인한]데|그리고|[.!?]")
 
 /**
  * "커피 마시면 괜찮아" → true, "커피 안 마셔"·"커피는 못 마셔"·"커피 싫어"·"커피 말고 물" → false,
@@ -159,7 +159,9 @@ private fun foodLiked(answer: String, food: String): Boolean {
     if ((food == "커피" || food == "아메리카노") && coffeePreference(answer) == false) return false
     var i = answer.indexOf(food)
     while (i >= 0) {
-        if (!FOOD_NEG.containsMatchIn(answer.substring(i + food.length))) return true
+        // "휴게소라면", "졸음쉼터라면"의 '-라면'은 음식이 아니다: 바로 앞이 한글이면 건너뛴다.
+        val ending = food == "라면" && i > 0 && answer[i - 1] in '가'..'힣'
+        if (!ending && !FOOD_NEG.containsMatchIn(answer.substring(i + food.length))) return true
         i = answer.indexOf(food, i + 1)
     }
     return false
@@ -199,7 +201,7 @@ class Conversation(
     fun answerOffer(answer: String?): String? {
         val story = offered ?: return null
         offered = null
-        if (answer.isNullOrBlank() || NO_WORDS.any { answer.contains(it) }) return "알겠어요. 듣고 싶을 때 '재밌는 얘기 해 줘'라고 해 주세요."
+        if (answer.isNullOrBlank() || isNo(answer)) return "알겠어요. 듣고 싶을 때 '재밌는 얘기 해 줘'라고 해 주세요."
         followUp = story
         return null
     }
@@ -290,7 +292,6 @@ class Conversation(
     }
 
     private companion object {
-        val NO_WORDS = listOf("아니", "됐어", "됐어요", "싫어", "나중에", "괜찮아", "괜찮아요", "그만")
         val CHAT_REPLIES = listOf("그렇군요!", "오, 좋네요.", "말씀 들으니 저도 궁금해지네요.", "좋은데요?")
     }
 }

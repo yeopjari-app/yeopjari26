@@ -52,7 +52,8 @@ class AndroidVoiceIO(context: Context) : VoiceIO {
     override val canListen: Boolean = SpeechRecognizer.isRecognitionAvailable(appContext)
 
     override suspend fun koreanTtsReady(): Boolean =
-        ttsReady.await() && tts.isLanguageAvailable(Locale.KOREAN) >= TextToSpeech.LANG_AVAILABLE
+        // 음성 엔진이 끝내 준비 신호를 주지 않아도 점검이 멈춰 있지 않게 5초까지만 기다린다.
+        (withTimeoutOrNull(5_000) { ttsReady.await() } ?: false) && tts.isLanguageAvailable(Locale.KOREAN) >= TextToSpeech.LANG_AVAILABLE
 
     override fun holdMedia(mode: AudioMode) {
         if (mode <= held) return
@@ -89,7 +90,8 @@ class AndroidVoiceIO(context: Context) : VoiceIO {
      * 콜백이 오지 않아도 글자 수로 잡은 시간([speakTimeoutMs]) 뒤에는 반드시 돌아와 대화가 멈추지 않게 한다.
      */
     override suspend fun speak(text: String) {
-        if (!ttsReady.await()) return
+        // 엔진이 초기화 결과를 끝내 알려 주지 않아도 대화가 영원히 멈추지 않게 5초까지만 기다린다.
+        if (withTimeoutOrNull(5_000) { ttsReady.await() } != true) return
         tts.setLanguage(Locale.KOREAN)
         tts.setPitch(pitch)
         tts.setSpeechRate(rate)
@@ -124,24 +126,48 @@ class AndroidVoiceIO(context: Context) : VoiceIO {
     override suspend fun listen(timeoutMs: Long): ListenResult {
         if (!canListen) return ListenResult.Unavailable
         val result = withContext(Dispatchers.Main) {
-            val recognizer = SpeechRecognizer.createSpeechRecognizer(appContext)
+            // 인식기 연결이 거부되는 기기(SecurityException 등)에서도 앱이 죽지 않고 화면 대답으로 넘어가게 한다.
+            val recognizer = runCatching { SpeechRecognizer.createSpeechRecognizer(appContext) }.getOrNull()
+                ?: return@withContext ListenResult.Unavailable
             try {
-                withTimeoutOrNull(timeoutMs) { recognize(recognizer) } ?: ListenResult.Silent
+                recognize(recognizer, timeoutMs)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: RuntimeException) {
+                ListenResult.Unavailable
             } finally {
-                recognizer.destroy()
+                runCatching { recognizer.destroy() }
             }
         }
         // 음악을 멈추지 못해 노래가 계속 나왔다면, 대답이 없던 게 아니라 들을 수 없었던 것이다.
         return if (result is ListenResult.Silent && !paused && audio.isMusicActive) ListenResult.Unavailable else result
     }
 
-    private suspend fun recognize(recognizer: SpeechRecognizer): ListenResult =
-        suspendCancellableCoroutine { cont ->
-            val startedAt = SystemClock.elapsedRealtime()
+    /**
+     * 듣는 시간 안에 말을 시작하면, 그 말이 끝날 때까지 최대 [SPEECH_GRACE_MS] 더 기다린다(느리게 말한 대답을 무응답으로 자르지 않게).
+     */
+    private suspend fun recognize(recognizer: SpeechRecognizer, timeoutMs: Long): ListenResult {
+        var speechAt: Long? = null
+        val startedAt = SystemClock.elapsedRealtime()
+        val deferred = kotlinx.coroutines.CompletableDeferred<ListenResult>()
+        recognizeInto(recognizer, startedAt, { speechAt = it }, deferred)
+        return withTimeoutOrNull(timeoutMs) { deferred.await() }
+            ?: if (speechAt != null) withTimeoutOrNull(SPEECH_GRACE_MS) { deferred.await() } ?: ListenResult.Silent
+            else ListenResult.Silent
+    }
+
+    private fun recognizeInto(
+        recognizer: SpeechRecognizer,
+        startedAt: Long,
+        onSpeech: (Long) -> Unit,
+        out: kotlinx.coroutines.CompletableDeferred<ListenResult>,
+    ) {
+        run {
             var speechAt: Long? = null
+            val cont = object { val isActive get() = !out.isCompleted; fun resume(r: ListenResult) { out.complete(r) } }
             recognizer.setRecognitionListener(object : RecognitionListener {
                 override fun onBeginningOfSpeech() {
-                    speechAt = SystemClock.elapsedRealtime()
+                    speechAt = SystemClock.elapsedRealtime().also(onSpeech)
                 }
                 override fun onResults(results: Bundle?) {
                     val text = results
@@ -155,6 +181,8 @@ class AndroidVoiceIO(context: Context) : VoiceIO {
                     if (cont.isActive) cont.resume(result)
                 }
                 override fun onError(error: Int) {
+                    // 알아들은 말이 없으면(소음·음악이 말처럼 잡힌 경우 포함) 대답으로 보지 않는다:
+                    // 소음이 깨우기를 멈추면 안 된다. 소음 때문일 수 있으니 앱은 "제 말 들리세요?"로 한 번 더 묻는다.
                     val result = when (error) {
                         SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_NO_MATCH -> ListenResult.Silent
                         else -> ListenResult.Unavailable
@@ -173,12 +201,18 @@ class AndroidVoiceIO(context: Context) : VoiceIO {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
             }
             recognizer.startListening(intent)
-            cont.invokeOnCancellation { recognizer.cancel() }
+            out.invokeOnCompletion { if (it != null) runCatching { recognizer.cancel() } }
         }
+    }
 
     override fun release() {
         releaseMedia()
         tts.stop()
         tts.shutdown()
+    }
+
+    private companion object {
+        /** 말을 시작했으면 듣는 시간이 끝나도 이만큼 더 기다린다. */
+        const val SPEECH_GRACE_MS = 4_000L
     }
 }

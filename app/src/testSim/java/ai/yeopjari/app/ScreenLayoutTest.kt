@@ -60,6 +60,8 @@ class ScreenLayoutTest {
         run(2)
         compose.onNodeWithText("같이 가기").performClick()
         run(6)
+        androidx.lifecycle.ViewModelProvider(compose.activity)[CopilotViewModel::class.java].clearVoiceIssuesForScreenshot()
+        run(1)
         val bmp = shot(name)
         compose.onNodeWithText("대답 속도").assertExists()
         if (wide) compose.onNodeWithText("오늘의 졸음 예보").assertExists()
@@ -73,27 +75,30 @@ class ScreenLayoutTest {
         }
     }
 
-    @Test @Config(sdk = [34], qualifiers = "w1920dp-h1080dp-land-mdpi")
+    @Test @Config(sdk = [35], qualifiers = "w1920dp-h1080dp-land-mdpi")
     fun landscape1920x1080() = capture("1920x1080", wide = true)
 
-    @Test @Config(sdk = [34], qualifiers = "w1280dp-h800dp-land-xhdpi")
+    @Test @Config(sdk = [35], qualifiers = "w1280dp-h800dp-land-xhdpi")
     fun tablet2560x1600() = capture("2560x1600", wide = true)
 
-    @Test @Config(sdk = [34], qualifiers = "w360dp-h800dp-port-xxhdpi")
+    @Test @Config(sdk = [35], qualifiers = "w360dp-h800dp-port-xxhdpi")
     fun phone1080x2400() = capture("1080x2400_portrait", wide = false)
 
-    @Test @Config(sdk = [34], qualifiers = "w1280dp-h720dp-land-mdpi")
+    @Test @Config(sdk = [35], qualifiers = "w1280dp-h720dp-land-mdpi")
     fun car1280x720() = capture("1280x720", wide = true)
 
     /** 가로로 든 휴대전화(840dp 미만)는 세 칸이 아니라 세로 배치를 쓴다. */
-    @Test @Config(sdk = [34], qualifiers = "w800dp-h360dp-land-xxhdpi")
+    @Test @Config(sdk = [35], qualifiers = "w800dp-h360dp-land-xxhdpi")
     fun phoneLandscapeUsesPortraitLayout() {
         capture("2400x1080_phone_landscape", wide = false)
-        assertEquals(0, compose.onAllNodesWithText("오늘의 졸음 예보").fetchSemanticsNodes().size)
+        // 좁은 배치: 대답 속도·조향 타일이 한 줄에 나란히 놓인다(넓은 배치는 위아래로 쌓는다)
+        val reply = compose.onNodeWithText("대답 속도").fetchSemanticsNode().boundsInRoot
+        val steer = compose.onNodeWithText("조향").fetchSemanticsNode().boundsInRoot
+        assertTrue("좁은 배치 타일이 한 줄", kotlin.math.abs(reply.top - steer.top) < 4f && steer.left > reply.left)
     }
 
     /** 권한은 없는 것만, 이 빌드가 선언한 것만 묻는다(가상 주행 빌드는 위치 권한을 선언하지 않는다). */
-    @Test @Config(sdk = [34], qualifiers = "w1280dp-h720dp-land-mdpi")
+    @Test @Config(sdk = [35], qualifiers = "w1280dp-h720dp-land-mdpi")
     fun asksOnlyMissingDeclaredPermissions() {
         assertEquals(emptyList<String>(), compose.activity.missingPermissions())
         shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>()).denyPermissions(Manifest.permission.RECORD_AUDIO)
@@ -101,7 +106,7 @@ class ScreenLayoutTest {
     }
 
     /** 가족 번호 창: 형식이 틀리면 바로 알려 주고 저장을 막는다. 주행이 시작되면 창을 닫는다. */
-    @Test @Config(sdk = [34], qualifiers = "w1280dp-h720dp-land-mdpi")
+    @Test @Config(sdk = [35], qualifiers = "w1280dp-h720dp-land-mdpi")
     fun phoneDialogValidatesAndClosesWhenDriving() {
         run(2)
         compose.onNodeWithText("가족 번호").performClick()

@@ -18,8 +18,24 @@
     <uses-permission android:name="pleos.car.permission.CAR_WINDOWS" />
     <uses-permission android:name="pleos.car.permission.CONTROL_CAR_WINDOWS" />
     <uses-permission android:name="pleos.car.permission.READ_WINDSHIELD_WIPERS" />
+    <!-- 차로 유지 보조 경고등(LKA·LFA·ELK): Safety.registerTelltales 가 요구한다 -->
+    <uses-permission android:name="pleos.car.permission.PRIVATE_CAR_SAFETY" />
+
+    <!-- FusedLocation SDK: registerFusedLocationCallback / unregister 가 요구한다 -->
+    <uses-permission android:name="pleos.car.permission.FUSED_LOCATION" />
+    <!-- NaviHelper SDK: addWaypoint(경유지) · getDestinationInfo(남은 거리)가 요구한다 -->
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE_SEARCH" />
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
+
+    <!-- Android Automotive 표준 차량 속성(GEAR_SELECTION) 읽기 -->
+    <uses-permission android:name="android.car.permission.CAR_POWERTRAIN" />
 
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <application>
+        <!-- 차량 서비스 라이브러리. 없는 기기에서도 설치·실행되게 required=false -->
+        <uses-library android:name="android.car" android:required="false" />
+    </application>
 
 </manifest>

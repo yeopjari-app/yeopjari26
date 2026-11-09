@@ -41,6 +41,7 @@ object FamilyNotice {
         var digits = input.orEmpty().filter { it.isDigit() || it == '+' }
         if (digits.startsWith("+82")) digits = "0" + digits.removePrefix("+82").trimStart('0')
         digits = digits.filter { it.isDigit() }
-        return digits.takeIf { it.length in 10..11 && it.startsWith("01") }
+        // 010 번호는 11자리, 011·016~019 는 10~11자리.
+        return digits.takeIf { it.startsWith("01") && (if (it.startsWith("010")) it.length == 11 else it.length in 10..11) }
     }
 }

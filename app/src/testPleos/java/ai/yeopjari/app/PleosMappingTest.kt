@@ -26,6 +26,13 @@ class PleosMappingTest {
         assertEquals(Gear.DRIVE, mapGear(VehicleGear.GEAR_3))
         assertEquals(Gear.UNKNOWN, mapGear(VehicleGear.GEAR_UNKNOWN))
         assertEquals(Gear.UNKNOWN, mapGear(null))
+        // Android Automotive 표준 GEAR_SELECTION 값도 같은 기어로 옮긴다
+        assertEquals(Gear.PARK, mapCarGear(4))
+        assertEquals(Gear.REVERSE, mapCarGear(2))
+        assertEquals(Gear.NEUTRAL, mapCarGear(1))
+        assertEquals(Gear.DRIVE, mapCarGear(8))
+        assertEquals(Gear.DRIVE, mapCarGear(64))
+        assertEquals(Gear.UNKNOWN, mapCarGear(0))
     }
 
     @Test

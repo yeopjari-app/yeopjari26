@@ -82,7 +82,8 @@ class DriveSessionTracker(
         val prev = last
         last = snapshot
         if (prev != null && prev.gear != Gear.PARK) {
-            val dt = (snapshot.timeMs - prev.timeMs).coerceAtLeast(0)
+            // 앱이 멈췄다 돌아온 공백은 1분까지만 운전으로 센다(긴 공백 전체를 고속 주행으로 세지 않게).
+            val dt = (snapshot.timeMs - prev.timeMs).coerceIn(0, 60_000)
             drivingMs += dt
             if (prev.speedKph >= highSpeedKph) highSpeedMs += dt
         }

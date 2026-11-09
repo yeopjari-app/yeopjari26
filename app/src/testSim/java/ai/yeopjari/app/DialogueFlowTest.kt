@@ -48,7 +48,7 @@ import java.time.Duration
  * 앱이 정말로 단계를 넘어가는지, 제어가 거절되면 음성으로 대신하는지를 확인한다.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(sdk = [35])
 class DialogueFlowTest {
     /** 운전자 대본: 지금 대답하는 방식. */
     private enum class Reply { FAST, SLOW, SILENT, ERROR }
@@ -325,6 +325,12 @@ class DialogueFlowTest {
         // 목소리를 알아들으면 안내가 사라진다
         voice.reply = Reply.FAST
         assertTrue("안내 사라짐", runUntil(240) { vm.ui.value.voiceIssues.none { it.startsWith(SILENT_HINT) } })
+        // 질문을 기다리지 않고도 먼저 말할 수 있다: 입력칸의 "조용히 해 줘" → 조용히 모드, "말하기" 뒤 "피곤해" → 쉼터 안내
+        vm.quickReply("조용히 해 줘")
+        assertTrue("먼저 한 말로 조용히 모드", runUntil(60) { said("동안 먼저 말 걸지 않을게요") })
+        voice.answers["말씀하세요"] = "피곤해"
+        vm.talk()
+        assertTrue("말하기 → 피곤해 → 쉼터 안내", runUntil(60) { said("말씀해 주셔서 고마워요") })
     }
 
     @Test

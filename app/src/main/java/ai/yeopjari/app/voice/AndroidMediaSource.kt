@@ -15,6 +15,6 @@ class AndroidMediaSource(context: Context) : MediaSource {
 
     override fun state(nowMs: Long): MediaState = MediaState(
         playing = audio.isMusicActive,
-        inCall = audio.mode == AudioManager.MODE_IN_CALL || audio.mode == AudioManager.MODE_IN_COMMUNICATION,
+        inCall = audio.mode == AudioManager.MODE_IN_CALL || audio.mode == AudioManager.MODE_IN_COMMUNICATION || audio.mode == AudioManager.MODE_RINGTONE,
     )
 }

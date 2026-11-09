@@ -24,7 +24,7 @@ object SleepAnswer {
     private val WORDS = Regex("($KO_ALT)(?:(?:에서|~|-|,|이나|or)?(?:$KO_ALT))?시간")
     private val DIGITS = Regex("""(\d+(?:\.\d+)?)(?:(?:[~-]|에서)\d+(?:\.\d+)?)?시간""")
     /** "푹 못 잤어", "잘 안 잤어", "충분하지 않아", "개운하지 않네"처럼 부정된 좋은 말. */
-    private val NEGATED_GOOD = Regex("(푹|잘|충분|많이|개운)\\S{0,3}(못|안|않|아니)")
+    private val NEGATED_GOOD = Regex("(푹|잘|충분|많이|개운)\\S{0,3}(못잤|못자|못잠|못했|못해|안잤|안자|않|아니)")
 
     fun hours(text: String): Double? {
         val t = text.replace(" ", "")
@@ -36,7 +36,7 @@ object SleepAnswer {
 
     fun parse(text: String): SleepBand {
         val t = text.replace(" ", "")
-        if ("전에일어" in t || "시간전" in t) return SleepBand.UNKNOWN  // "한 시간 전에 일어났어"는 잔 시간이 아니다
+        if ("전에일어" in t || Regex("시간전(에|이|부터|쯤)").containsMatchIn(t)) return SleepBand.UNKNOWN  // "한 시간 전에 일어났어"는 잔 시간이 아니다
         hours(t)?.let { h ->
             return when {
                 h >= 7 -> SleepBand.ENOUGH
@@ -168,6 +168,8 @@ fun restPlanLine(sleep: SleepBand, plan: RestPlanner.Plan, departMinuteOfDay: In
         if (plan.restAfterRisk) return "$why$forecastText 졸음이 곧 올 수 있으니, 가까운 휴게소에서 바로 한 번 쉬어 가요. 지금 찾아 드릴게요."
         return "$why$forecastText 그 전에, ${whenText}에 한 번 쉬어 가요. 그때 가까운 휴게소를 찾아 드릴게요."
     }
+    // 예보상 위험이 출발하자마자 오면(시각을 모를 때도) "0분 뒤"가 아니라 바로 쉬자고 한다.
+    if (plan.restAfterRisk || plan.firstRestMin <= 0) return "${why}졸음이 곧 올 수 있으니, 가까운 휴게소에서 바로 한 번 쉬어 가요. 지금 찾아 드릴게요."
     val time = if (plan.vulnerable) "졸리기 쉬운 시간대라 " else ""
     return "$why${time}${whenText}에 한 번 쉬어 가요. 그때 가까운 휴게소를 찾아 드릴게요."
 }

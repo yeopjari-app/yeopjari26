@@ -19,6 +19,8 @@ val keystoreProps = Properties().apply {
 android {
     namespace = "ai.yeopjari.app"
     compileSdk = 35
+    // Android Automotive 의 표준 차량 속성(기어)을 읽는다. 컴파일에만 쓰고, 차가 아닌 기기에는 없어도 된다(Pleos 빌드에서만 사용).
+    useLibrary("android.car")
 
     defaultConfig {
         applicationId = "ai.yeopjari.app"
@@ -85,13 +87,14 @@ dependencies {
 
     // 시연 빌드 스모크 테스트(Robolectric 으로 실제 화면을 띄운다)
     "testSimImplementation"(libs.junit)
-    "testPleosImplementation"(libs.junit)
     "testSimImplementation"(libs.robolectric)
     "testSimImplementation"(libs.androidx.test.core)
     "testSimImplementation"(platform(libs.androidx.compose.bom))
     "testSimImplementation"(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.test.manifest)
     if (pleosEnabled) {
+        // pleos 맛(flavor)이 있을 때만 그 테스트 설정이 생긴다(기본 빌드에서 없는 설정을 쓰면 빌드가 실패한다)
+        "testPleosImplementation"(libs.junit)
         "pleosImplementation"(libs.vehicle.sdk)
         "pleosImplementation"(libs.fused.location.sdk)
         "pleosImplementation"(libs.navi.helper.sdk)

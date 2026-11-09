@@ -52,6 +52,8 @@ interface CabinControl {
     /** 운전석 창문을 2~3cm만 열거나 원래대로 닫는다. 찬 바람과 바람 소리로 깨우는 신호. */
     suspend fun crackWindow(open: Boolean): Boolean
     suspend fun hazardLights(on: Boolean): Boolean
+    /** 깨우기로 바꾼 온도·풍량·통풍을 깨우기 전으로 되돌린다. */
+    suspend fun restoreClimate(): Boolean = true
 }
 
 /**
@@ -165,6 +167,8 @@ data class CopilotConfig(
     val coffeeWaitMs: Long = 5 * 60_000,
     /** 실제 공공데이터 대신 시연용 샘플 쉼터 4곳만 쓴다(정해진 결과가 필요한 자동 테스트용). */
     val sampleRestStops: Boolean = false,
+    /** 두 번 불러도 대답이 없었으면 다음 확인을 이만큼 뒤로 당긴다(주의 간격 전체를 기다리지 않게). */
+    val silentRecheckMs: Long = 45_000,
 )
 
 class Platform(

@@ -5,32 +5,47 @@ package ai.yeopjari.core
  * "안"은 낱말 앞에서만 본다("안녕", "안성"은 거절이 아니다).
  */
 private val NEGATION = Regex(
-    "(^|\\s)안\\s?(할|해|돼|될|들|쉴|쉬|가|갈|켜|자|먹|마|원|필요)|(^|\\s)안\\s*$|(^|\\s)못|싫|말고|지\\s?마|지\\s?않|별로|아니|아뇨|됐어|됐습|괜찮아|괜찮습|나중에|그만|패스",
+    "(^|\\s)안\\s?(할|해|돼|될|들|쉴|쉬|가|갈|켜|자|먹|마|원|필요|볼|보)|(^|\\s)안\\s*$|(^|\\s)못|싫|말고|지\\s?마|지\\s?않|별로|아니|아뇨|됐어|됐습|괜찮아|괜찮습|나중에|그만\\s?(해|둬|말|하|됐|물|얘기|요\\s*$)|그만\\s*$|패스|필요\\s?없|관심\\s?없|사양|^노$",
+)
+
+/**
+ * 부정 낱말이 들어 있어도 실제로는 "그렇다"는 말: "졸려서 못 참겠어", "더는 못 가겠어"(쉬어야겠다),
+ * "싫지 않아", "나쁘지 않네", "안 쉬면 안 되지". 거절을 보기 전에 이 부분을 빼고, 긍정으로 센다.
+ */
+private val YES_DESPITE_NEGATION = Regex(
+    "못\\s?(참|버티|버팀|견디|견딤)|더(는|이상|\\s?이상)?\\s?못\\s?가|(싫|나쁘)지\\s?(는\\s?|도\\s?)?않|안\\s?\\S+면\\s?안\\s?(돼|되)",
 )
 
 /** 그 자체로 대답이 되는 짧은 긍정 낱말(낱말 전체가 같아야 한다: "예전", "응원"은 아니다). */
 private val YES_TOKENS = setOf(
     "응", "웅", "어", "엉", "네", "넵", "넹", "예", "그래", "그래요", "좋아", "좋아요", "좋지", "좋죠", "오케이", "ok", "okay", "ㅇㅇ", "ㅇㅋ", "콜",
-    "해", "해요", "해줘", "해줘요", "가요", "그럼", "물론", "당연하지", "그렇게", "그러자", "그러죠", "그럽시다",
+    "해", "해요", "해줘", "해줘요", "가요", "그럼", "물론", "당연하지", "그렇게", "그러자", "그러죠", "그럽시다", "네에", "예에",
 )
 
 /** 이렇게 시작하는 낱말은 긍정("좋아요", "부탁해", "들를게", "가자", "켜 줘", "알았어"). */
-private val YES_PREFIXES = listOf("좋아", "좋지", "좋네", "좋습", "부탁", "들를", "들르", "들러", "가자", "갑시다", "켜", "그래", "그러", "알았", "알겠", "당연", "물론")
+private val YES_PREFIXES = listOf("좋아", "좋지", "좋네", "좋습", "좋겠", "좋은데요", "그렇습", "부탁", "들를", "들르", "들러", "가자", "갑시다", "켜", "그래", "그러", "알았", "알겠", "당연", "물론", "맞아", "맞아요", "맞죠", "그렇지", "그렇죠", "쉴게", "쉴래", "쉬어", "쉬자", "갈게", "갈래")
 
 /** 긍정 접두어로 시작하지만 긍정이 아닌 낱말. */
-private val NOT_YES = setOf("그래도", "그래서", "그러니까", "그러면", "그런데", "그러나", "켜져", "켜있")
+private val NOT_YES = setOf("그래도", "그래서", "그러니까", "그러면", "그런데", "그러나", "켜져", "켜있", "그렇지만", "쉬어야")
 
 /**
  * 제안에 대한 짧은 대답을 판단한다. 거절·부정 표현을 먼저 본다("괜찮아요"는 거절, "안 들를래"도 거절).
  * 긍정은 낱말 단위로만 본다: "응원", "예전", "네비" 같은 말 속의 글자로는 긍정이 되지 않는다.
  */
 fun isYes(answer: String?): Boolean {
-    val text = answer?.trim()?.lowercase().orEmpty()
-    if (text.isEmpty()) return false
+    val raw = answer?.trim()?.lowercase().orEmpty()
+    if (raw.isEmpty()) return false
+    val text = raw.replace(YES_DESPITE_NEGATION, " ").trim()
     if (NEGATION.containsMatchIn(text)) return false
-    val words = text.split(Regex("[\\s,.!?~…]+")).filter { it.isNotEmpty() }
+    if (text != raw) return true   // "못 참겠어", "싫지 않아"처럼 부정 꼴의 긍정만 있었다
+    // "네네", "응응", "어어"처럼 같은 글자를 되풀이한 대답은 한 글자로 본다.
+    val words = text.split(Regex("[\\s,.!?~…]+")).filter { it.isNotEmpty() }.map { it.replace(Regex("^(.)\\1+$"), "$1") }
     // "해 줘", "해 봐"처럼 띄어 쓴 짧은 말도 한 낱말로 본다.
     val joined = words.joinToString("")
     if (joined in setOf("해줘", "해봐", "해줘요", "해봐요", "해주세요", "켜줘", "가줘")) return true
     return words.any { w -> w !in NOT_YES && (w in YES_TOKENS || YES_PREFIXES.any { w.startsWith(it) }) }
 }
+
+/** 거절·부정 표현이 들어 있으면 true("아뇨", "별로", "싫은데", "괜찮아요", "안 들을래"). */
+fun isNo(answer: String?): Boolean =
+    NEGATION.containsMatchIn(answer?.trim()?.lowercase().orEmpty().replace(YES_DESPITE_NEGATION, " "))

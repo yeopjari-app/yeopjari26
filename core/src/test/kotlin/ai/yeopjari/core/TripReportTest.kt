@@ -44,6 +44,7 @@ class TripReportTest {
         trip.tick(40 * min)
         val rows = trip.summary(1_000, remembered = "").rows().toMap()
         assertEquals("30분", rows["함께한 시간"])
+        assertEquals("2시간", duration(120))
         assertFalse(rows.containsKey("졸음 신호"))
         assertFalse(rows.containsKey("깨우기"))
         assertFalse(rows.containsKey("휴식"))

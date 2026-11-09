@@ -97,7 +97,7 @@ object FatigueForecast {
         val m = Math.floorMod((minuteOfDay + 5) / 10 * 10, 1440)
         val h = m / 60
         val mm = m % 60
-        val part = when (h) { 0 -> "밤"; in 1..5 -> "새벽"; in 6..11 -> "오전"; in 12..17 -> "오후"; else -> "밤" }
+        val part = when (h) { 0 -> "밤"; in 1..5 -> "새벽"; in 6..11 -> "오전"; in 12..17 -> "오후"; in 18..20 -> "저녁"; else -> "밤" }
         val h12 = if (h % 12 == 0) 12 else h % 12
         return if (mm == 0) "$part ${h12}시" else "$part ${h12}시 ${mm}분"
     }

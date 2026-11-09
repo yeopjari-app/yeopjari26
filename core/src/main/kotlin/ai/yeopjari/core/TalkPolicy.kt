@@ -53,7 +53,8 @@ class TalkPolicy(
             if (!urgent || waitedMs < urgentCallCapMs) return TalkDecision.Wait(pollMs, WaitReason.CALL)
         }
         val talk = TalkDecision.Talk(speakMode(media), listenMode(media))
-        if (stage != AlertStage.NORMAL || waitedMs >= maxDeferMs) return talk
+        // 차량이 경고를 내고 있으면 음악·조작 중이어도 기다리지 않는다.
+        if (stage != AlertStage.NORMAL || vehicleWarning || waitedMs >= maxDeferMs) return talk
 
         val sinceInteraction = media.lastInteractionMs?.let { nowMs - it }
         if (sinceInteraction != null && sinceInteraction in 0 until interactionGraceMs) {

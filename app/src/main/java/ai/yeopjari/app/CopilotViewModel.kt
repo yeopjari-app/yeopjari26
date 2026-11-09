@@ -46,6 +46,7 @@ import ai.yeopjari.core.Workload
 import ai.yeopjari.core.WorkloadGate
 import ai.yeopjari.core.detectIntent
 import ai.yeopjari.core.isMeaningfulAnswer
+import ai.yeopjari.core.isNo
 import ai.yeopjari.core.isYes
 import ai.yeopjari.core.distanceKm
 import ai.yeopjari.core.lastStopBeforeGap
@@ -72,6 +73,8 @@ import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -165,6 +168,8 @@ data class UiState(
     val forecast: List<Pair<Int, Float>> = emptyList(),
     /** 예보를 그린 출발 시각(자정부터 분). */
     val forecastDepartMin: Int? = null,
+    /** 예보 출발 뒤 지난 분(벽시계 기준). 쉬고 나서도 예보 그래프의 "지금" 선이 제자리를 지킨다. */
+    val forecastNowMin: Int = 0,
 )
 
 /** 점검 화면: 신호는 1초마다 새로 읽고, 제어는 누를 때마다 결과를 남긴다. 시험 중인 제어는 [running]. */
@@ -282,6 +287,12 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
     private var lastStop: RestStop? = null
     private var weaving = false
     private var earlyCheckRequested = false
+    /** 방금 확인에서 두 번 불러도 대답이 없었는지. */
+    private var lastCheckSilent = false
+    /** 파워냅으로 좌석을 눕혔는지(앱이 닫힐 때 되돌린다). */
+    @Volatile private var seatReclined = false
+    /** 화면이 앞에 있는지. 뒤로 가면 마이크를 쓸 수 없어 무응답을 졸음으로 보지 않는다. */
+    @Volatile private var inForeground = true
     private var storyRequested = false
     private var checksThisTrip = 0
     private var wakeLevel = 0
@@ -323,10 +334,83 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
         coffeeDone?.complete(Unit)
     }
 
-    /** 화면의 빠른 대답·입력칸. 듣는 중일 때만 대답으로 쓰인다(목소리 대신이 아니라 함께). */
+    /**
+     * 화면의 빠른 대답·입력칸. 듣는 중이면 그 질문의 대답으로 쓰고(목소리 대신이 아니라 함께),
+     * 듣는 중이 아니면 운전자가 먼저 한 말로 받아 바로 처리한다("조용히 해 줘", "피곤해", "재밌는 얘기 해 줘").
+     */
     override fun quickReply(text: String) {
         val t = text.trim()
-        if (t.isNotEmpty()) typed?.complete(t)
+        if (t.isEmpty()) return
+        val pending = typed
+        if (pending != null && !pending.isCompleted) { pending.complete(t); return }
+        if (!_ui.value.speaking) { driverSays(t); return }
+        // 질문을 읽는 도중에 입력했다면, 말이 끝나고 듣기가 시작되면 그 질문의 대답으로 쓴다(잠깐 기다려도 듣기가 없으면 먼저 한 말로).
+        viewModelScope.launch {
+            var waited = 0
+            while (_ui.value.speaking && waited < 15_000) { delay(100); waited += 100 }
+            repeat(15) {
+                val p = typed
+                if (p != null && !p.isCompleted) { p.complete(t); return@launch }
+                delay(100)
+            }
+            driverSays(t)
+        }
+    }
+
+    /**
+     * 화면의 "말하기": 질문을 기다리지 않고 운전자가 먼저 말한다. 한 번 듣고, 요청이면 바로 따른다.
+     * (차에서는 핸들의 음성 버튼에 연결한다.)
+     */
+    override fun talk() {
+        viewModelScope.launch {
+            startNow()
+            exchange {
+                speak("네, 말씀하세요.")
+                when (val r = ask()) {
+                    is ListenResult.Heard -> handleDriverRequest(r.text, alreadyShown = true)
+                    else -> log("말하기 — 들은 말 없음")
+                }
+            }
+        }
+    }
+
+    private fun driverSays(text: String) {
+        viewModelScope.launch {
+            startNow()
+            exchange { handleDriverRequest(text) }
+        }
+    }
+
+    /** 운전자가 먼저 한 말: 피곤함은 바로 쉼터로, "조용히"는 조용히 모드로, 이야기 요청은 다음 차례에 이야기로. */
+    private suspend fun handleDriverRequest(text: String, alreadyShown: Boolean = false) {
+        _ui.update { it.copy(lastExchange = "운전자: $text") }
+        // 목소리로 들은 말은 [ask] 가 이미 대화창에 올렸다.
+        if (!alreadyShown) chat(ChatLine(fromDriver = true, text = text, time = clockNow()))
+        when (detectIntent(text)) {
+            DriverIntent.TIRED -> {
+                speak("말씀해 주셔서 고마워요.")
+                offerRestStop()
+            }
+            DriverIntent.QUIET -> enterQuietMode()
+            DriverIntent.STORY -> {
+                storyRequested = true
+                earlyCheckRequested = true
+                speak("좋아요, 재밌는 얘기 하나 해 드릴게요.")
+                log("이야기 요청")
+            }
+            DriverIntent.NONE -> {
+                speak("네, 들었어요. 쉬고 싶으면 '피곤해', 조용히 가고 싶으면 '조용히 해 줘'라고 해 주세요.")
+                log("운전자 말: $text")
+            }
+        }
+    }
+
+    private suspend fun enterQuietMode() {
+        val ms = quiet.start(SystemClock.elapsedRealtime(), localHour(System.currentTimeMillis()), tracker.drivingMs)
+        val span = if (ms >= 60_000) "${ms / 60_000}분" else "${ms / 1000}초"
+        quietEnded = null
+        speak("알겠어요. $span 동안 먼저 말 걸지 않을게요. 대신 핸들이랑 차량 신호는 계속 보고 있을게요.")
+        log("조용히 모드 $span · 감지는 계속")
     }
 
     /**
@@ -341,6 +425,12 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
             if (!voice.koreanTtsReady()) issues += "한국어 음성(TTS)이 없어요 · 설정 → 시스템 → 언어 → 텍스트 음성 변환에서 한국어 설치"
             _ui.update { s -> s.copy(voiceIssues = issues + s.voiceIssues.filter { it.startsWith(SILENT_HINT) }) }
         }
+    }
+
+    /** 화면 캡처 테스트 전용: 테스트 환경(Robolectric)에는 음성 엔진이 없어 뜨는 안내를 지우고 실제 차 화면처럼 찍는다. */
+    @androidx.annotation.VisibleForTesting
+    internal fun clearVoiceIssuesForScreenshot() {
+        _ui.update { it.copy(voiceIssues = emptyList()) }
     }
 
     /** 화면의 "같이 가기": 언제든 바로 함께한다. */
@@ -490,7 +580,15 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
         }
         if (!wasParked && parked && seatRestorePending) {
             seatRestorePending = false
-            viewModelScope.launch { platform.cabin.restoreSeat(); log("정차 — 좌석 원위치") }
+            viewModelScope.launch {
+                if (platform.cabin.restoreSeat()) {
+                    seatReclined = false
+                    log("정차 — 좌석 원위치")
+                } else {
+                    log("정차 — 좌석 원위치 실패")
+                    exchange { speak("좌석을 원래대로 세워 주세요.") }
+                }
+            }
         }
         raining = snapshot.wipersOn
         val busy = gate.update(snapshot)
@@ -548,6 +646,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
                 parked = parked,
                 speedKph = snapshot.speedKph.roundToInt(),
                 drivingMinutes = tracker.drivingMs / 60_000,
+                forecastNowMin = it.forecastDepartMin?.let { d -> Math.floorMod(localMinuteOfDay(snapshot.timeMs) - d, 1440) } ?: 0,
                 stage = engine.stage,
                 baselineSec = engine.baselineMs / 1000.0,
                 quietReason = busy.firstOrNull()?.label,
@@ -769,6 +868,8 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
     }
 
     private fun say(text: String) {
+        // 낮잠 중에는 동승자 탑승 같은 안내로 운전자를 깨우지 않는다.
+        if (_ui.value.napping) { log("낮잠 중 — 안내 생략"); return }
         viewModelScope.launch {
             waitWhileInCall()
             exchange { speak(text) }
@@ -906,6 +1007,8 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
     }
 
     private suspend fun ask(): ListenResult {
+        // 화면이 뒤로 가 있으면 마이크로 들을 수 없다: 대답이 없던 것으로 보지 않고 이번 확인을 건너뛴다.
+        if (!inForeground) return ListenResult.Unavailable
         holdMedia(talkPolicy.listenMode(mediaNow()))
         val tap = CompletableDeferred<String>().also { typed = it }
         _ui.update { it.copy(listening = true) }
@@ -992,6 +1095,11 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
     }
 
     private suspend fun runCheck() {
+        // 화면이 뒤로 가 있으면 들을 수 없다: 묻고 듣지 못하는 일이 없게 이번 확인을 통째로 건너뛴다.
+        if (!inForeground) {
+            log("앱이 뒤에 있어 이번 확인은 건너뜀")
+            return
+        }
         // 들을 수 없는 상태에서 확인을 하면 무응답이 쌓여 잘못된 위험 판정이 나온다.
         // 마이크를 쓸 수 없으면 한 번 소리 내어 알리고, 확인은 화면 대답(빠른 대답·입력칸)으로 이어 간다.
         // 이때 대답이 없는 것은 졸음이 아니라 들을 수 없었던 것이므로 판정하지 않는다([ask] 가 Unavailable 로 돌려준다).
@@ -1029,14 +1137,16 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
             log("음성 인식 오류 — 이번 확인은 건너뜀")
             return
         }
+        lastCheckSilent = result !is ListenResult.Heard
         // 즐거운 대화·이야기는 생각할 시간이 필요할 수 있어 대답 속도를 판정에 쓰지 않는다.
         // 무응답(다시 물어도 대답이 없거나 다시 물어서야 대답한 경우)은 어떤 대화든 판정한다.
         val measured = turn.measured || retried
         val heardMs = (result as? ListenResult.Heard)?.let { it.latencyMs + if (retried) platform.config.listenTimeoutMs else 0L }
         trip.conversation(heardMs, measured = measured && heardMs != null)
         val stage = if (measured) record(result, retried) else engine.stage
-        // 대답했으면 깨우기를 멈춘다. 아직 주의 단계면 환기(창문)는 그대로 둔다.
-        if (result is ListenResult.Heard) clearWake(keepWindow = stage == AlertStage.CAUTION)
+        // 알아들을 수 있는 대답을 했으면 깨우기를 멈춘다("어…" 같은 소리만으로는 멈추지 않는다).
+        // 아직 주의 단계면 환기(창문)는 그대로 둔다.
+        if (result is ListenResult.Heard && isMeaningfulAnswer(result.text)) clearWake(keepWindow = stage == AlertStage.CAUTION)
         _ui.update { it.copy(lastExchange = describe(turn.prompt, result, measured)) }
 
         val intent = detectIntent(result.text)
@@ -1052,13 +1162,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
                 offerRestStop()
                 return
             }
-            DriverIntent.QUIET -> {
-                val ms = quiet.start(SystemClock.elapsedRealtime(), localHour(System.currentTimeMillis()), tracker.drivingMs)
-                val span = if (ms >= 60_000) "${ms / 60_000}분" else "${ms / 1000}초"
-                quietEnded = null
-                speak("알겠어요. $span 동안 먼저 말 걸지 않을게요. 대신 핸들이랑 차량 신호는 계속 보고 있을게요.")
-                log("조용히 모드 $span · 감지는 계속")
-            }
+            DriverIntent.QUIET -> enterQuietMode()
             DriverIntent.STORY -> {
                 storyRequested = true
                 earlyCheckRequested = true
@@ -1076,7 +1180,10 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
             AlertStage.NORMAL -> Unit
             AlertStage.CAUTION -> offerFreshAir()
             // 다시 불러도 대답이 없어 위험이 됐다면 "들를까요?"로 묻지 않고 바로 깨운다(대답하면 쉼터로 바로 안내).
-            AlertStage.DANGER -> if (result is ListenResult.Heard) offerRestStop() else wakeEscalation()
+            AlertStage.DANGER -> if (result is ListenResult.Heard) {
+                // 이미 쉼터를 경유지로 넣고 가는 중이면 같은 쉼터를 또 묻고 또 넣지 않는다.
+                if (restSuggested && lastStop != null) speak("${particle(lastStop!!.name, "으로", "로")} 가는 중이에요. 조금만 더 힘내세요.") else offerRestStop()
+            } else wakeEscalation()
         }
     }
 
@@ -1090,6 +1197,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
             else -> CheckResult(null, correct = false)
         }
         val before = engine.stage
+        lastCheckSilent = check.latencyMs == null
         val stage = engine.record(check)
         trip.stage(stage)
         if (stage > before) trip.signal(if (check.latencyMs == null) DrowsySignal.NO_ANSWER else DrowsySignal.SLOW_ANSWER)
@@ -1170,6 +1278,8 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
             speak("${nearby.stop.name}에 들를까요? '응'이나 '아니'로 말씀해 주세요.")
             answer = ask()
         }
+        // 차량 졸음 경고나 위험 단계처럼 졸음 근거가 따로 있으면, 들을 수 없었던 경우(마이크 미확인·권한 없음)도 무응답으로 본다.
+        if (answer is ListenResult.Unavailable && (engine.stage == AlertStage.DANGER || vehicleWarning)) answer = ListenResult.Silent
         if (answer is ListenResult.Silent) {
             _ui.update { it.copy(restOption = null) }
             // 깨우기는 이미 위험하다는 근거가 있을 때만(위험 단계이거나 차량 경고가 켜져 있을 때).
@@ -1270,6 +1380,12 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
             if (wakeLevel != level) return@launch
             val burst = platform.cabin.wakeBurst()
             if (!windowCracked && !raining && !parked && platform.cabin.crackWindow(true)) windowCracked = true
+            if (wakeLevel != level) {
+                // 깨우는 사이 운전자가 대답했다: 방금 바꾼 온도·풍량·통풍과 창문을 바로 되돌린다.
+                platform.cabin.restoreClimate()
+                if (windowCracked && engine.stage != AlertStage.CAUTION) { windowCracked = false; platform.cabin.crackWindow(false) }
+                return@launch
+            }
             val parts = listOfNotNull("알람", "찬 바람·통풍 시트·열선 끄기·실내등".takeIf { burst }, "창문 살짝".takeIf { windowCracked })
             trip.wake(WakeAction.ALARM)
             if (windowCracked) addWake(WAKE_WINDOW)
@@ -1293,12 +1409,20 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
                     log("목소리 전환 → ${Persona.DRILL.label}")
                     addWake(WAKE_VOICE)
                     speakAs(Persona.DRILL, Persona.DRILL.wakeLine)
-                    if (ask() is ListenResult.Heard) {
+                    val reply = ask()
+                    if (reply is ListenResult.Heard && isMeaningfulAnswer(reply.text)) {
                         clearWake()
                         routeToRestStop()
                     }
                 } else {
+                    // 알람·말하는 사이 운전자가 대답했거나 차를 세웠으면 비상등·가족 문자를 보내지 않는다.
+                    if (wakeLevel != level) return@exchange
                     if (!hazardOn && platform.cabin.hazardLights(true)) {
+                        if (wakeLevel != level) {
+                            // 켜는 사이 운전자가 대답했다(깨우기 해제): 방금 켠 비상등을 바로 끈다.
+                            platform.cabin.hazardLights(false)
+                            return@exchange
+                        }
                         hazardOn = true
                         trip.wake(WakeAction.HAZARD)
                         log("비상등 켜짐")
@@ -1306,7 +1430,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
                     // 비상등을 직접 켤 수 없는 차(공개 Pleos SDK 등)에서는 켰다고 말하지 않고 운전자에게 부탁한다
                     if (hazardOn) speak("비상등을 켰어요. 가장 가까운 안전한 곳에 차를 세워 주세요.")
                     else speak("비상등을 켜고, 가장 가까운 안전한 곳에 차를 세워 주세요.")
-                    alertFamily()
+                    if (wakeLevel == level) alertFamily()
                 }
             }
         }
@@ -1323,8 +1447,8 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
         val nearby = nearestStop()
         val text = FamilyNotice.noResponse(nearby?.stop?.name, nearby?.distanceKm?.roundToInt()?.coerceAtLeast(1))
         if (family.send(text)) {
+            familyAlertAtMs = now   // 보낸 시각: 30분 안에는 다시 보내지 않는다(실패하면 다음 깨우기에서 다시 시도)
             familyAlerted = true
-            familyAlertAtMs = now
             trip.wake(WakeAction.FAMILY_ALERT)
             addWake(WAKE_FAMILY)
             speak("가족에게 연락했어요. 전화가 오면 받아 주세요.")
@@ -1352,15 +1476,22 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
             viewModelScope.launch { platform.cabin.crackWindow(false) }
             log("창문 닫힘")
         }
+        // 깨우기로 바꾼 온도·풍량·통풍은 주의 단계(창문은 열어 둠)여도 되돌린다.
+        viewModelScope.launch { platform.cabin.restoreClimate() }
         if (hazardOn) {
             hazardOn = false
             viewModelScope.launch { platform.cabin.hazardLights(false) }
             log("비상등 꺼짐")
         }
         if (familyAlerted) {
-            familyAlerted = false
-            familyAlertAtMs = null   // 안심 문자를 보냈으니, 다시 무응답이면 새 위급 문자를 보낼 수 있다
-            viewModelScope.launch { if (family.send(FamilyNotice.respondedAgain())) log("가족에게 안심 문자 보냄") }
+            familyAlerted = false   // 위급 문자는 [FAMILY_ALERT_GAP_MS] 안에는 다시 보내지 않는다(familyAlertAtMs 유지)
+            viewModelScope.launch {
+                if (family.send(FamilyNotice.respondedAgain())) {
+                    // 안심 문자를 보냈으니, 다시 대답이 없어지면 30분을 기다리지 않고 다시 알린다.
+                    familyAlertAtMs = null
+                    log("가족에게 안심 문자 보냄")
+                }
+            }
         }
     }
 
@@ -1383,13 +1514,15 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
             }
             if (!accepted || !parked) return@launch
             // 커피를 사러 간 동안은 목소리를 붙잡지 않는다(그 사이 다른 안내가 막히지 않게).
-            if (exchange { askCoffee() }) waitForCoffee()
+            if (exchange { askCoffee() } && !waitForCoffee()) return@launch
             if (!parked) return@launch
             var reclined = false
             try {
                 exchange {
                     if (!parked) return@exchange
-                    reclined = platform.cabin.reclineSeat()
+                    // 눕히는 도중 취소돼도 되돌릴 수 있게 먼저 표시한다(움직이지 못했으면 아래에서 되돌린다).
+                    reclined = true; seatReclined = true
+                    reclined = platform.cabin.reclineSeat(); seatReclined = reclined
                     platform.cabin.freshAir()
                     speak(if (reclined) "좌석을 눕혀 드릴게요. 15분 뒤에 깨워 드릴게요." else "좌석을 편하게 눕히세요. 15분 뒤에 깨워 드릴게요.")
                 }
@@ -1402,8 +1535,13 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
                 exchange {
                     if (!parked) return@exchange   // 그 사이 출발했으면 알람을 울리지 않는다
                     holdMedia(AudioMode.PAUSE)
-                    ring()
-                    speak("일어날 시간이에요. 좌석을 세울게요.")
+                    // 대답할 때까지 세 번까지 다시 울린다(알람 한 번으로는 깊이 잠든 사람이 못 깰 수 있다).
+                    for (attempt in 1..3) {
+                        ring()
+                        speak(if (attempt == 1) "일어날 시간이에요." else "일어나셨어요? 15분 지났어요.")
+                        if (ask() is ListenResult.Heard || !parked) break
+                    }
+                    speak("좌석을 세울게요.")
                     // 나눈 이야기를 휴게소에서 다시 꺼낸다(예: "아, 호두과자 사 가는 거 잊지 마세요.")
                     conversation.memory.foodLabel?.let { speak("아, $it 사 가는 거 잊지 마세요.") }
                 }
@@ -1411,7 +1549,10 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
             } finally {
                 withContext(NonCancellable) {
                     if (reclined) {
-                        if (parked) platform.cabin.restoreSeat() else seatRestorePending = true
+                        if (parked) {
+                            if (!platform.cabin.restoreSeat()) viewModelScope.launch { exchange { speak("좌석을 원래대로 세워 주세요.") } }
+                            seatReclined = false
+                        } else seatRestorePending = true
                     }
                     _ui.update { it.copy(napping = false, napEndsAtMs = null) }
                     publishTrip()
@@ -1463,19 +1604,23 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
     }
 
     /** "파워냅 시작"을 누르거나, 다시 물었을 때 "아직"이 아니면 끝난다. 다시 출발하면 낮잠 작업째로 취소된다. */
-    private suspend fun waitForCoffee() {
+    private suspend fun waitForCoffee(): Boolean {
         val done = CompletableDeferred<Unit>().also { coffeeDone = it }
         _ui.update { it.copy(coffeeWaiting = true) }
         try {
-            while (true) {
-                if (withTimeoutOrNull(platform.config.coffeeWaitMs) { done.await() } != null) return
-                val stillOut = exchange {
+            // 대답이 없으면 아직 차에 없는 것으로 본다(빈 차에서 좌석을 눕히고 가족 문자를 보내지 않게). 세 번 물어도 없으면 버튼만 기다린다.
+            repeat(3) {
+                if (withTimeoutOrNull(platform.config.coffeeWaitMs) { done.await() } != null) return true
+                val back = exchange {
                     speak("커피 드셨어요? 이제 15분 재워 드릴게요.")
                     val r = ask()
-                    (r is ListenResult.Heard && r.text.contains("아직")).also { if (it) speak("천천히 다녀오세요.") }
+                    (r is ListenResult.Heard && r.text.isNotBlank() && !r.text.contains("아직") && !isNo(r.text)).also { if (!it && r is ListenResult.Heard) speak("천천히 다녀오세요.") }
                 }
-                if (!stillOut) return
+                if (back) return true
             }
+            log("커피 냅 — 대답 없음, 파워냅 시작 버튼을 기다림")
+            done.await()
+            return true
         } finally {
             coffeeDone = null
             _ui.update { it.copy(coffeeWaiting = false) }
@@ -1492,7 +1637,18 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
         }
         val resume = Calendar.getInstance().apply { add(Calendar.MINUTE, NAP_MINUTES) }
         val text = FamilyNotice.restStarted(lastStopName, NAP_MINUTES, resume.get(Calendar.HOUR_OF_DAY), resume.get(Calendar.MINUTE))
-        familyNotified = family.send(text)
+        familyNotified = withContext(NonCancellable) {
+            val sent = family.send(text)
+            familyNotified = sent
+            _ui.update { it.copy(familyNotified = sent) }
+            if (sent && !parked) {
+                // 보내는 사이에 이미 출발했다(출발 처리는 문자 결과를 아직 몰랐다): 재출발도 바로 알린다.
+                familyNotified = false
+                _ui.update { it.copy(familyNotified = false) }
+                if (family.send(FamilyNotice.resumed(lastStopName))) log("가족에게 재출발 문자 보냄")
+            }
+            familyNotified
+        }
         _ui.update { it.copy(familyNotified = familyNotified) }
         log(if (familyNotified) "가족에게 휴식 문자 보냄" else "가족 문자 실패 — 권한·통신 확인")
     }
@@ -1516,6 +1672,8 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
     }
 
     private fun intervalFor(stage: AlertStage): Long = when {
+        // 다시 불러도 대답이 없었다면 주의 간격 전체를 기다리지 않고 곧 다시 확인한다(그래도 없으면 위험 → 깨우기).
+        lastCheckSilent && stage != AlertStage.NORMAL -> minOf(platform.config.cautionIntervalMs, platform.config.silentRecheckMs)
         stage != AlertStage.NORMAL -> platform.config.cautionIntervalMs
         inQuietMode() -> platform.config.normalIntervalMs * 2
         // 쉬자는 제안을 미뤘으면 한동안 절반 간격으로
@@ -1538,12 +1696,29 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
         _ui.update { it.copy(log = (listOf(message) + it.log).take(8)) }
     }
 
+    /** 화면이 앞에 나오거나 뒤로 갈 때(MainActivity onResume·onPause). */
+    fun setForeground(on: Boolean) {
+        inForeground = on
+    }
+
     override fun onCleared() {
         publishTrip()
         saveBaseline()
         saveMemory()
-        voice.release()
-        platform.release()
+        // 앱이 닫혀도 좌석·창문·비상등을 원래대로 돌려 놓은 뒤에 차량 연결을 놓는다(viewModelScope 는 이미 취소됐다).
+        val reclined = seatReclined
+        val window = windowCracked
+        val hazard = hazardOn
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {
+            withTimeoutOrNull(12_000) {
+                if (reclined) runCatching { platform.cabin.restoreSeat() }
+                runCatching { platform.cabin.restoreClimate() }
+                if (window) runCatching { platform.cabin.crackWindow(false) }
+                if (hazard) runCatching { platform.cabin.hazardLights(false) }
+            }
+            voice.release()
+            platform.release()
+        }
     }
 
     private companion object {

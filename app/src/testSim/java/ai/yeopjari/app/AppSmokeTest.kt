@@ -28,7 +28,7 @@ import java.time.Duration
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34], qualifiers = "w1280dp-h720dp-land-xhdpi")
+@Config(sdk = [35], qualifiers = "w1280dp-h720dp-land-xhdpi")
 class AppSmokeTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 

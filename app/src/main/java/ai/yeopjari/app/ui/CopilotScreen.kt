@@ -30,6 +30,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -48,6 +50,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -103,6 +106,7 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -158,6 +162,8 @@ interface CopilotActions {
     fun startNapNow() = Unit
     fun toggleRecirculation() = Unit
     fun quickReply(text: String) = Unit
+    /** 질문을 기다리지 않고 운전자가 먼저 말한다(화면의 "말하기"). */
+    fun talk() = Unit
     fun refreshVoiceStatus() = Unit
 }
 
@@ -243,10 +249,11 @@ fun CopilotScreen(state: UiState, actions: CopilotActions) {
     var pickingVoice by rememberSaveable { mutableStateOf(false) }
     val typing = rememberSaveable { mutableStateOf("") }
     val driving = state.accompanying && !state.parked
-    LaunchedEffect(driving) {
+    LaunchedEffect(driving, state.diag != null) {
         if (driving) {
             editingPhone = false
             pickingVoice = false
+            if (state.diag != null) actions.closeDiagnostics()   // 점검 화면도 주행이 시작되면 닫는다
         }
     }
     val clock = rememberClock()
@@ -256,7 +263,8 @@ fun CopilotScreen(state: UiState, actions: CopilotActions) {
     BoxWithConstraints(
         Modifier.fillMaxSize()
             .background(Brush.verticalGradient(listOf(P.bgTop, P.bgBottom)))
-            .windowInsetsPadding(WindowInsets.safeDrawing)
+            // 키보드(IME)는 빼고 잡는다: 키보드가 올라올 때마다 배율·배치(넓은/좁은)가 바뀌어 입력칸이 사라지지 않게.
+            .windowInsetsPadding(WindowInsets.safeDrawing.exclude(WindowInsets.ime))
     ) {
         val (wide, scale) = layoutScale(maxWidth.value, maxHeight.value)
         val base = LocalDensity.current
@@ -274,8 +282,10 @@ fun CopilotScreen(state: UiState, actions: CopilotActions) {
             LocalMinimumInteractiveComponentSize provides touch,
             LocalViewConfiguration provides config,
         ) {
-            ProvideTextStyle(TextStyle(fontFamily = WantedSans, color = P.text)) {
-                Box(Modifier.fillMaxSize().clip(WindowShape)) {
+            // 한국어는 낱말(띄어쓰기) 단위로 줄을 바꾼다: "그 / 려요"처럼 한 글자만 다음 줄로 넘어가지 않게(Android 13 이상).
+            ProvideTextStyle(TextStyle(fontFamily = WantedSans, color = P.text, lineBreak = KoreanLineBreak)) {
+                // 키보드가 올라오면 내용만 그 위로 올린다(배율은 그대로).
+                Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime).clip(WindowShape)) {
                     if (wide) WideLayout(state, actions, tone, clock, typing, onFamily = { editingPhone = true }, onVoice = { pickingVoice = true })
                     else NarrowLayout(state, actions, tone, clock, typing, onFamily = { editingPhone = true }, onVoice = { pickingVoice = true })
                     EdgeLight(tone, clock)
@@ -335,6 +345,8 @@ private fun WideLayout(state: UiState, actions: CopilotActions, tone: Tone, cloc
                             HeardLine(state)
                             Spacer(Modifier.height(6.dp))
                             if (state.listening) QuickReplies(actions, typing) else JudgementChips(judgements(state), stacked = true)
+                            // 듣는 중이 아니어도 입력칸과 "말하기"는 늘 둔다: 질문을 기다리지 않고 "조용히 해 줘"·"피곤해"를 말할 수 있게.
+                            if (!state.listening && state.accompanying) { Spacer(Modifier.height(8.dp)); InputRow(actions, typing, listening = false) }
                         }
                     }
                 }
@@ -356,23 +368,36 @@ private fun WideLayout(state: UiState, actions: CopilotActions, tone: Tone, cloc
 
 @Composable
 private fun NarrowLayout(state: UiState, actions: CopilotActions, tone: Tone, clock: State<Float>, typing: MutableState<String>, onFamily: () -> Unit, onVoice: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Header(state, tone, clock, onVoice)
-        VoiceIssueBanner(state.voiceIssues)
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            // 낮은 창(가로로 든 휴대전화)에서는 오브를 줄여 타일까지 한눈에 들어오게 한다.
-            val orb = if (maxHeight < 420.dp) 64.dp else 200.dp
-            Crossfade(targetState = state.napping, label = "napSwitch") { napping ->
-                Column(
-                    Modifier.fillMaxHeight().fillMaxWidth().verticalScroll(rememberScrollState()),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    if (napping) NapView(state) else MainView(state, actions, tone, clock, typing, orb)
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // 낮은 창(가로로 든 휴대전화)에서는 안내·버튼 줄을 아래에 붙박지 않고 본문과 함께 스크롤한다.
+        // 붙박으면 본문 칸이 한 줄 높이로 줄어 타일이 거의 보이지 않는다.
+        val short = maxHeight < 700.dp
+        Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Header(state, tone, clock, onVoice)
+            if (!short) VoiceIssueBanner(state.voiceIssues)
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                // 낮은 창에서는 오브를 줄여 타일까지 한눈에 들어오게 한다.
+                val orb = if (short || maxHeight < 420.dp) 64.dp else 200.dp
+                Crossfade(targetState = state.napping, label = "napSwitch") { napping ->
+                    Column(
+                        Modifier.fillMaxHeight().fillMaxWidth().verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(if (short) 10.dp else 0.dp),
+                    ) {
+                        if (short) VoiceIssueBanner(state.voiceIssues)
+                        if (napping) NapView(state) else MainView(state, actions, tone, clock, typing, orb)
+                        if (short) {
+                            ActionRow(state, actions, onFamily, onVoice)
+                            if (state.demoAvailable) DemoRow(state, actions)
+                        }
+                    }
                 }
             }
+            if (!short) {
+                ActionRow(state, actions, onFamily, onVoice)
+                if (state.demoAvailable) DemoRow(state, actions)
+            }
         }
-        ActionRow(state, actions, onFamily, onVoice)
-        if (state.demoAvailable) DemoRow(state, actions)
     }
 }
 
@@ -412,12 +437,6 @@ private fun HeardLine(state: UiState) {
  */
 @Composable
 private fun QuickReplies(actions: CopilotActions, typing: MutableState<String>) {
-    val send = {
-        if (typing.value.isNotBlank()) {
-            actions.quickReply(typing.value)
-            typing.value = ""
-        }
-    }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             QUICK_REPLIES.forEach { reply ->
@@ -428,21 +447,51 @@ private fun QuickReplies(actions: CopilotActions, typing: MutableState<String>) 
                 ) { Text(reply, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1) }
             }
         }
+        InputRow(actions, typing, listening = true)
+    }
+}
+
+/**
+ * 입력칸 한 줄. 듣는 중이면 그 질문의 대답으로, 아니면 운전자가 먼저 하는 말로 보낸다.
+ * 듣는 중이 아닐 때는 앞에 "말하기"(누르고 말하기)를 둔다.
+ */
+@Composable
+private fun InputRow(actions: CopilotActions, typing: MutableState<String>, listening: Boolean) {
+    val send = {
+        if (typing.value.isNotBlank()) {
+            actions.quickReply(typing.value)
+            typing.value = ""
+        }
+    }
+    val hint = if (listening) "직접 입력해 대답하기" else "직접 입력해 말하기"
+    run {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            BasicTextField(
-                typing.value, { typing.value = it }, singleLine = true,
-                textStyle = TextStyle(fontFamily = WantedSans, fontSize = 14.sp, color = P.text),
-                cursorBrush = Brush.verticalGradient(listOf(P.cyan, P.cyan)),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { send() }),
-                modifier = Modifier.weight(1f).heightIn(min = LocalMinimumInteractiveComponentSize.current).clip(RoundedCornerShape(12.dp)).background(P.chip).border(1.dp, P.stroke, RoundedCornerShape(12.dp))
-                    .semantics { contentDescription = "직접 입력해 대답하기" }
-                    .padding(horizontal = 12.dp, vertical = 13.dp),
-                decorationBox = { inner -> Box { if (typing.value.isEmpty()) Text("직접 입력해 대답하기", fontSize = 14.sp, color = P.sub); inner() } },
-            )
+            if (!listening) Box(
+                Modifier.heightIn(min = LocalMinimumInteractiveComponentSize.current).clip(RoundedCornerShape(12.dp)).background(P.option)
+                    .border(1.dp, Color(0x553D8BFF), RoundedCornerShape(12.dp))
+                    .clickable(role = Role.Button, onClickLabel = "질문을 기다리지 않고 말하기") { actions.talk() }.padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) { Text("말하기", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1, softWrap = false) }
+            // 입력칸 테두리는 버튼과 같은 높이로 그리고, 글자는 그 안에서 세로 가운데에 둔다(작은 배율에서 위로 붙지 않게).
             Box(
-                Modifier.heightIn(min = LocalMinimumInteractiveComponentSize.current).clip(RoundedCornerShape(12.dp)).background(P.blue)
-                    .clickable(role = Role.Button) { send() }.padding(horizontal = 14.dp),
+                Modifier.weight(1f).heightIn(min = LocalMinimumInteractiveComponentSize.current).clip(RoundedCornerShape(12.dp))
+                    .background(P.chip).border(1.dp, P.stroke, RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                BasicTextField(
+                    typing.value, { typing.value = it }, singleLine = true,
+                    textStyle = TextStyle(fontFamily = WantedSans, fontSize = 14.sp, color = P.text),
+                    cursorBrush = Brush.verticalGradient(listOf(P.cyan, P.cyan)),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { send() }),
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = hint }.padding(horizontal = 12.dp, vertical = 10.dp),
+                    decorationBox = { inner -> Box(contentAlignment = Alignment.CenterStart) { if (typing.value.isEmpty()) Text(hint, fontSize = 14.sp, color = P.sub, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis); inner() } },
+                )
+            }
+            val canSend = typing.value.isNotBlank()
+            Box(
+                Modifier.heightIn(min = LocalMinimumInteractiveComponentSize.current).clip(RoundedCornerShape(12.dp)).background(if (canSend) P.blue else P.blue.copy(alpha = .35f))
+                    .clickable(enabled = canSend, role = Role.Button) { send() }.padding(horizontal = 14.dp),
                 contentAlignment = Alignment.Center,
             ) { Text("보내기", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White) }
         }
@@ -467,9 +516,22 @@ private fun ForecastCard(state: UiState, modifier: Modifier) {
         }
         val dep = state.forecastDepartMin
         Text(
-            if (riskAt != null && dep != null) "${FatigueForecast.spokenClock(dep + riskAt)} 위험" else if (pts.isNotEmpty()) "위험 구간 없음" else "출발할 때 잠을 여쭤보면 그려져요",
-            fontSize = if (pts.isEmpty()) 15.sp else 26.sp, fontWeight = FontWeight.Bold, color = if (riskAt != null) Color(0xFFFF8A70) else P.text,
+            if (riskAt != null && dep != null) "${FatigueForecast.spokenClock(dep + riskAt)} 위험" else if (pts.isNotEmpty()) "위험 구간 없음" else "출발할 때 그려져요",
+            fontSize = if (pts.isEmpty()) 20.sp else 26.sp, fontWeight = FontWeight.Bold, color = if (riskAt != null) Color(0xFFFF8A70) else P.text,
         )
+        if (pts.isEmpty()) {
+            // 예보 전: 빈 상자 대신 어떤 그림이 그려질지 흐리게 보여 준다(졸림·위험 띠와 점선 곡선).
+            Canvas(Modifier.fillMaxWidth().weight(1f)) {
+                drawRect(Color(0x14FF6F61), Offset(0f, 0f), Size(size.width, size.height * .25f))
+                drawRect(Color(0x10FFC061), Offset(0f, size.height * .25f), Size(size.width, size.height * .25f))
+                val path = Path().apply {
+                    moveTo(0f, size.height * .9f)
+                    cubicTo(size.width * .35f, size.height * .75f, size.width * .55f, size.height * .2f, size.width, size.height * .15f)
+                }
+                drawPath(path, P.sub.copy(alpha = .55f), style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f))))
+            }
+            Text("\"어젯밤 몇 시간 주무셨어요?\"에 답하면 언제 졸릴지 미리 그려요", fontSize = 12.sp, color = P.sub, maxLines = 2)
+        }
         if (pts.isNotEmpty()) Canvas(Modifier.fillMaxWidth().weight(1f)) {
             val maxM = pts.last().first.coerceAtLeast(1)
             fun x(m: Int) = size.width * m / maxM
@@ -479,7 +541,7 @@ private fun ForecastCard(state: UiState, modifier: Modifier) {
             val path = Path().apply { pts.forEachIndexed { i, (m, k) -> if (i == 0) moveTo(x(m), y(k)) else lineTo(x(m), y(k)) } }
             drawPath(path, P.cyan, style = Stroke(3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
             riskAt?.let { r -> pts.firstOrNull { it.first == r }?.let { drawCircle(Color(0xFFFF6F61), 6.dp.toPx(), Offset(x(r), y(it.second))) } }
-            val now = state.drivingMinutes.toInt().coerceIn(0, maxM)
+            val now = state.forecastNowMin.coerceIn(0, maxM)
             drawLine(Color.White.copy(alpha = .5f), Offset(x(now), 0f), Offset(x(now), size.height), 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
         }
         if (pts.isNotEmpty()) Text("수면 과학 모형(세 과정 모형) · 달리는 동안 대답 속도로 확인", fontSize = 11.sp, color = P.sub, maxLines = 1)
@@ -538,8 +600,12 @@ private fun MainView(state: UiState, actions: CopilotActions, tone: Tone, clock:
     Caption(state)
     HeardLine(state)
     if (state.listening) QuickReplies(actions, typing) else JudgementChips(judgements(state))
+    if (!state.listening && state.accompanying) { Spacer(Modifier.height(8.dp)); InputRow(actions, typing, listening = false) }
     Spacer(Modifier.height(12.dp))
     Tiles(state, clock)
+    Spacer(Modifier.height(12.dp))
+    // 세로·좁은 화면에서도 넓은 화면처럼 오늘의 졸음 예보를 보여 준다(빈 자리 없이)
+    ForecastCard(state, Modifier.fillMaxWidth().height(190.dp))
     Spacer(Modifier.height(12.dp))
     LowArea(state)
 }
@@ -565,6 +631,7 @@ private fun AiOrb(state: UiState, tone: Tone, clock: State<Float>, modifier: Mod
     Canvas(modifier.graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
         val t = clock.value
         val w = size.minDimension
+        if (w <= 1f) return@Canvas   // 자리가 없으면 그리지 않는다(반지름 0 그라데이션은 오류)
         val c = Offset(size.width / 2, size.height / 2)
         val cs = listOf(c0.value, c1.value, c2.value)
         // 말하는 세기: 실제 음량은 없어서 겹친 사인파로 만든 가짜 진폭(말하는 동안만).
@@ -695,12 +762,15 @@ private fun JudgementChips(chips: List<Judgement>, stacked: Boolean = false) {
                 Kind.OK -> P.ok to Color(0x592FE39A)
             }
             Text(
-                chip.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = fg, maxLines = 1,
+                chip.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.clip(CircleShape).background(P.chip).border(1.dp, line, CircleShape).padding(horizontal = 10.dp, vertical = 4.dp),
             )
     }
     if (stacked) Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) { chips.forEach { item(it) } }
-    else Row(Modifier.fillMaxWidth().height(26.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) { chips.forEach { item(it) } }
+    else Row(Modifier.fillMaxWidth().height(26.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
+        // 칩 글이 길어 한 줄을 넘으면 칩마다 말줄임으로 줄인다(끝이 잘려 나가지 않게).
+        chips.forEach { Box(Modifier.weight(1f, fill = false)) { item(it) } }
+    }
 }
 
 // ---------- 타일 3개 ----------
@@ -846,13 +916,13 @@ private fun SteerLine(trace: List<Float>, weaving: Boolean, clock: State<Float>)
         val path = Path()
         val scale = maxOf(10f, trace.maxOfOrNull { abs(it) } ?: 0f)
         val t = clock.value
-        val amp = if (weaving) .55f else 0f
         for (i in 0..n) {
             val v = if (trace.size >= 2) {
                 trace[(i * (trace.size - 1)) / n] / scale * (mid * .85f / (24f * size.height / 38f))
             } else {
+                // 표본이 아직 없으면 실제 신호처럼 보이지 않게 잔잔한 기다림 선만 흘린다.
                 val tt = t - 10f + i / 6f
-                sin(tt * 1.9f) * amp + sin(tt * .83f + 1f) * amp * .6f + .06f * sin(tt * 3.1f) + .03f * sin(tt * 7.3f)
+                .06f * sin(tt * 3.1f) + .03f * sin(tt * 7.3f)
             }
             val x = size.width * i / n
             val y = mid - v * 24f * size.height / 38f
@@ -895,7 +965,7 @@ private fun TripBar(minutes: Long, restMin: Long = REST_MIN, forecast: List<Pair
                     restMin % 30 == 0L -> "${restMin / 60}.5h"
                     restMin < 60 -> "${restMin}m"
                     else -> "${restMin / 60}h${restMin % 60}"
-                }, fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = P.sub, maxLines = 1,
+                }, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = P.sub, maxLines = 1,
                 modifier = Modifier.layout { measurable, constraints ->
                     val p = measurable.measure(constraints.copy(minWidth = 0, maxWidth = Constraints.Infinity))
                     layout(0, p.height) { p.place(-p.width / 2, 0) }
@@ -1191,7 +1261,7 @@ private fun ListeningPill(clock: State<Float>) {
                 drawLine(Color.White, Offset(x, (size.height - h) / 2), Offset(x, (size.height + h) / 2), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
             }
         }
-        Text("운전석에서 듣는 중…", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1)
+        Text("운전석에서 듣는 중…", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -1273,8 +1343,10 @@ private fun statusText(state: UiState): String = when {
 @Composable
 private fun Stat(label: String, value: String, color: Color = P.text) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontSize = 15.sp, color = P.sub)
-        Text(value, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = color, textAlign = TextAlign.End)
+        Text(label, fontSize = 15.sp, color = P.sub, maxLines = 1, softWrap = false)
+        Spacer(Modifier.width(12.dp))
+        // 값이 길면 값 쪽에서 줄을 바꾼다(라벨이 글자 단위로 꺾이지 않게).
+        Text(value, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = color, textAlign = TextAlign.End, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
     }
 }
 
@@ -1341,7 +1413,7 @@ private fun FamilyPhoneDialog(current: String?, onDone: (String?) -> Unit) {
         title = { Text("가족 알림 번호") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("쉬어 갈 때와 다시 출발할 때 이 번호로 문자를 보내요. 휴게소 이름까지만 적어요.", fontSize = 14.sp)
+                Text("쉬어 갈 때와 다시 출발할 때 이 번호로 문자를 보내요. 문자에는 정확한 위치 대신 휴게소 이름까지만 담겨요.", fontSize = 14.sp)
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
@@ -1449,3 +1521,6 @@ private fun CopilotNapPreview() {
         actions = PreviewActions,
     )
 }
+
+/** 한국어 줄바꿈: 띄어쓰기(어절) 단위. */
+private val KoreanLineBreak = LineBreak(LineBreak.Strategy.HighQuality, LineBreak.Strictness.Default, LineBreak.WordBreak.Phrase)

@@ -7,16 +7,16 @@
 
 <p align="center"><b>졸음을 경고하는 앱이 아니라, 졸음이 오기 전에 말을 걸고 쉬는 것까지 챙기는 차량용 음성 동승자</b></p>
 
-<p align="center">Pleos Connect 앱 · Android (Kotlin, Jetpack Compose)</p>
+<p align="center">Pleos Connect 앱 · Android (Kotlin, Jetpack Compose) · 현대자동차그룹 차량용 앱 개발 공모전 출품작</p>
 
 ## 한눈에
 
 - **출발 전 졸음 예보** — 어젯밤 잠과 지금 시각으로 이번 주행의 졸음을 미리 그리고(세 과정 각성 모형), 위험해지기 전에 쉴 때를 약속합니다.
 - **대답 속도로 각성 확인** — 바쁜 순간(차선 변경·급제동)은 피해 가볍게 말을 걸고, 운전자 본인의 평소 대답 속도와 비교해 정상 → 주의(환기) → 위험(깨우기)으로 판단합니다.
 - **쉬는 것까지** — 위험하면 진행 방향 앞쪽의 휴게소·졸음쉼터(공공데이터 실제 파일)를 경유지로 넣고, 커피 냅과 15분 파워냅(좌석·환기·알람), 가족 문자까지 챙깁니다.
-- **기억하는 동승자** — 목소리 4종. "커피 좋아해", "호두과자" 같은 대화를 기억했다가 쉬는 순간에 꺼냅니다.
+- **기억하는 동승자** — 목소리 4종. "커피 좋아해", "호두과자" 같은 대화를 기억했다가 쉬는 순간에 꺼냅니다. 질문을 기다리지 않고 **말하기**로 언제든 먼저 말할 수 있습니다.
 - **차와 연결** — 차량 신호·제어를 Pleos Vehicle · NaviHelper · FusedLocation SDK 에 연결했습니다(아래 활용 지도).
-- **검증** — 판단 로직 단위 테스트 144개, 앱 자동 테스트 35개. 판단은 설명 가능한 규칙과 공개 연구의 모형으로 하며, 생성형 AI 대화는 다음 단계입니다.
+- **검증** — 판단 로직 단위 테스트 144개, 앱 자동 테스트 35개(시연 앱 30개는 Robolectric으로 Android 15 환경에서 실행), 정적 분석(lint) 오류 0. 판단은 설명 가능한 규칙과 공개 연구의 모형으로 하며, 생성형 AI 대화는 다음 단계입니다.
 
 <p align="center"><img src="docs/screens/1920x1080.png" alt="옆자리 앱 화면 (가로 1920×1080)" width="820"></p>
 
@@ -24,15 +24,16 @@
 
 ## 심사위원용 빠른 시작 (약 3분)
 
-1. **설치** — `apk/Yeopjari_release.apk` 를 Android 에뮬레이터(API 28 이상)나 휴대폰에 끌어다 놓거나 `adb install apk/Yeopjari_release.apk`.
+1. **설치** — `apk/Yeopjari_release.apk` 를 Android 에뮬레이터(API 28 이상, 권장: Pixel Tablet · API 35 · Google Play 이미지)나 휴대폰에 끌어다 놓거나 `adb install apk/Yeopjari_release.apk`.
 2. **열기** — "옆자리"를 열고 마이크 권한을 허용합니다. 약 5초 뒤 가상 고속도로 주행(실제 1초 = 가상 1분)과 함께 동행이 시작됩니다. 바로 보려면 **같이 가기**.
    - 가로 화면에서 영상과 같은 세 칸 배치가 됩니다(에뮬레이터는 가로로 돌리거나 태블릿 AVD 권장).
    - 시연 빌드는 기다리지 않도록 시간을 줄였습니다: 20초마다 말을 걸고, 파워냅 15초(실제 15분), "조용히 해 줘" 1분(새벽·장시간 운전 30초 · 실제 20분/10분), 정차 10초면 휴식 인정(실제 10분).
    - **에뮬레이터에서 목소리로 대답하려면** 에뮬레이터의 **⋯ (Extended controls) → Microphone → "Virtual microphone uses host audio input"** 을 켜고, Google 앱(음성 인식)과 한국어 TTS 가 있는 이미지(Google APIs/Play)를 쓰세요. 안 되는 항목은 앱 위에 노란 안내로 뜹니다.
-3. **시연** — 말을 걸면 소리 내어 짧게 대답합니다. 마이크가 안 되면 듣는 동안 뜨는 **빠른 대답**을 눌러도 같은 흐름으로 이어지고, 한 번 화면으로 대답한 뒤에는 누르지 않고 두면 무응답으로 봅니다. 아래 버튼으로 전체 흐름을 확인할 수 있습니다.
+3. **시연** — 말을 걸면 소리 내어 짧게 대답합니다. 마이크가 안 되면 듣는 동안 뜨는 **빠른 대답**을 눌러도 같은 흐름으로 이어지고, 한 번 화면으로 대답한 뒤에는 누르지 않고 두면 무응답으로 봅니다. 질문을 기다리지 않고 **말하기**를 누르거나 입력칸에 "조용히 해 줘"·"피곤해"를 써도 바로 따릅니다. 아래 버튼으로 전체 흐름을 확인할 수 있습니다.
    - 바쁜 순간: **차선 변경** · **급제동** → 말을 멈추고 기다림
    - 졸음: 일부러 늦게 대답하거나 대답하지 않기 → **주의**(환기) → **위험**(열혈 교관 · 알람 · 휴게소 경유지)
-   - 쉬는 것까지: **휴식 정차** → 파워냅 제안 → "응" → 15초 파워냅 → **다시 출발** (낮잠 중에 출발하면 바로 멈추고, 좌석은 다음 정차 때 세웁니다)
+   - 쉬는 것까지: **휴식 정차** → 파워냅 제안 → "응" → 커피 질문에 대답 → 15초 파워냅 → **다시 출발** (낮잠 중에 출발하면 바로 멈추고, 좌석은 다음 정차 때 세웁니다)
+   - 먼저 말하기: **말하기**를 누르고 "조용히 해 줘"·"피곤해"·"재밌는 얘기 해 줘" (입력칸에 써도 됨)
    - 그 밖에: **내기 순환 켜기·끄기**(30초 뒤 외기로 전환) · **차로 유지 보조 켜기** · **차로 이탈 개입** · **핸들 놓음 경고** · **카메라 졸음 경고** · **차량 졸음 경고** · **동승자 탑승** · **음악 켜기** · **전화 받기** · "재밌는 얘기 해 줘"
 
 ## Pleos Connect SDK 활용 지도
@@ -41,17 +42,17 @@
 
 | Pleos SDK | 쓰는 값 · 기능 | 옆자리에서 하는 일 | 포트 → Pleos 구현 |
 |---|---|---|---|
-| **Vehicle** (Gear) + **FusedLocation** | 기어 P/R/N/D, 위치 변화로 계산한 차속 | 동행 시작(고속 주행 누적), 정차·휴식 인정, 파워냅은 P단에서만 | `VehicleSource` ([Ports.kt:11](app/src/main/java/ai/yeopjari/app/ports/Ports.kt#L11)) → `PleosVehicleState` ([PlatformFactory.kt:276](app/src/pleos/java/ai/yeopjari/app/PlatformFactory.kt#L276)) |
+| **Vehicle** + Android Automotive `GEAR_SELECTION` + **FusedLocation** | 기어 P/R/N/D(SDK 2.3.2 안내대로 표준 차량 속성을 먼저 읽고, 못 읽는 기기에서만 Pleos 기어 API), 위치 변화로 계산한 차속 | 동행 시작(고속 주행 누적), 정차·휴식 인정, 파워냅은 P단에서만 | `VehicleSource` ([Ports.kt:11](app/src/main/java/ai/yeopjari/app/ports/Ports.kt#L11)) → `PleosVehicleState` ([PlatformFactory.kt:328](app/src/pleos/java/ai/yeopjari/app/PlatformFactory.kt#L328)) |
 | **Vehicle** (TurnSignal · Brake · SteeringWheel) | 방향지시등, 급제동, 조향각 | 바쁜 순간 말 멈춤(`WorkloadGate`), 조향 흔들림 단서(`SteeringMonitor`) | 같은 `VehicleSnapshot` 필드 |
 | **Vehicle** (Seat · Safety/ADAS) | 조수석 탑승, 운전자 주의 경고(`DRIVER_ATTENTION`) | 동승자가 타면 대화 양보, 차량 경고 시 바로 위험 단계 | 같은 `VehicleSnapshot` 필드 |
-| **Vehicle** (Safety/ADAS 경고등) | 차로 유지 보조 `LKA`·`LFA`, 차로 이탈 보조 개입(`ELK`, `LKA` 깜빡임) | 보조가 켜져 있으면 조향 대신 대답으로 판단, 개입하면 바로 확인 | `isLaneAssistOn` · `isLaneIntervention` ([PlatformFactory.kt:256](app/src/pleos/java/ai/yeopjari/app/PlatformFactory.kt#L256)) |
+| **Vehicle** (Safety/ADAS 경고등) | 차로 유지 보조 `LKA`·`LFA`, 차로 이탈 보조 개입(`ELK`, `LKA` 깜빡임) | 보조가 켜져 있으면 조향 대신 대답으로 판단, 개입하면 바로 확인 | `isLaneAssistOn` · `isLaneIntervention` ([PlatformFactory.kt:308](app/src/pleos/java/ai/yeopjari/app/PlatformFactory.kt#L308)) |
 | **Vehicle** (HVAC 내기 순환) | 내기 순환 켜짐/꺼짐 | 30분(새벽 20분) 넘게 이어지면 외기로 한 번 전환 | `VehicleSnapshot.recirculationOn` → `CabinAirTracker` |
-| **Vehicle** (HVAC · Seat · Window · Light) | 외기 유입·온도·풍량, 등받이·통풍, 운전석 창문, 실내등 | 주의 단계 환기, 깨우기, 파워냅 좌석 눕히기·되돌리기 | `CabinControl` ([Ports.kt:43](app/src/main/java/ai/yeopjari/app/ports/Ports.kt#L43)) → `PleosCabinControl` ([PlatformFactory.kt:435](app/src/pleos/java/ai/yeopjari/app/PlatformFactory.kt#L435)) |
-| **NaviHelper** | 경유지 추가, 남은 거리 | 위험 단계에서 가장 가까운 휴게소를 경유지로, 100km 이상 장거리면 출발 5분 뒤 동행 | `Navigator` ([Ports.kt:23](app/src/main/java/ai/yeopjari/app/ports/Ports.kt#L23)) → `PleosNavigator` ([PlatformFactory.kt:547](app/src/pleos/java/ai/yeopjari/app/PlatformFactory.kt#L547)) |
-| **FusedLocation** | 현재 위치, 진행 방향 | 진행 방향 앞쪽의 가장 가까운 휴게소·졸음쉼터 찾기 | `LocationSource` ([Ports.kt:15](app/src/main/java/ai/yeopjari/app/ports/Ports.kt#L15)) → `PleosLocation` ([PlatformFactory.kt:154](app/src/pleos/java/ai/yeopjari/app/PlatformFactory.kt#L154)) — 끊기면 기기 GPS, 터널에서는 D단 동안 마지막 속도 유지 |
-| TextToSpeech · SpeechToText | 말하기, 듣기 | 대답 시작까지 걸린 시간 측정(음성 원문은 저장하지 않음), 목소리 4종 | `VoiceIO` ([Ports.kt:71](app/src/main/java/ai/yeopjari/app/ports/Ports.kt#L71)) → `AndroidVoiceIO` (Pleos TTS/STT 로 이 클래스만 교체) |
+| **Vehicle** (HVAC · Seat · Window · Light) | 외기 유입·온도·풍량, 등받이·통풍, 운전석 창문, 실내등 | 주의 단계 환기, 깨우기(끝나면 온도·풍량·통풍·열선·실내등을 원래대로), 파워냅 좌석 눕히기·되돌리기 | `CabinControl` ([Ports.kt:43](app/src/main/java/ai/yeopjari/app/ports/Ports.kt#L43)) → `PleosCabinControl` ([PlatformFactory.kt:516](app/src/pleos/java/ai/yeopjari/app/PlatformFactory.kt#L516)) |
+| **NaviHelper** | 경유지 추가, 남은 거리 | 위험 단계에서 가장 가까운 휴게소를 경유지로, 100km 이상 장거리면 출발 5분 뒤 동행 | `Navigator` ([Ports.kt:23](app/src/main/java/ai/yeopjari/app/ports/Ports.kt#L23)) → `PleosNavigator` ([PlatformFactory.kt:694](app/src/pleos/java/ai/yeopjari/app/PlatformFactory.kt#L694)) |
+| **FusedLocation** | 현재 위치, 진행 방향 | 진행 방향 앞쪽의 가장 가까운 휴게소·졸음쉼터 찾기 | `LocationSource` ([Ports.kt:15](app/src/main/java/ai/yeopjari/app/ports/Ports.kt#L15)) → `PleosLocation` ([PlatformFactory.kt:155](app/src/pleos/java/ai/yeopjari/app/PlatformFactory.kt#L155)) — 끊기면 기기 GPS, 터널에서는 D단 동안 마지막 속도 유지 |
+| TextToSpeech · SpeechToText | 말하기, 듣기 | 대답 시작까지 걸린 시간 측정(음성 원문은 저장하지 않음), 목소리 4종 | `VoiceIO` ([Ports.kt:73](app/src/main/java/ai/yeopjari/app/ports/Ports.kt#L73)) → `AndroidVoiceIO` (Pleos TTS/STT 로 이 클래스만 교체) |
 
-**현재 상태:** 시연 빌드가 전체 흐름을 실제로 구동합니다(자동 화면 테스트 `AppSmokeTest` 통과). Pleos 빌드는 Vehicle 2.3.2 · NaviHelper 3.0.5 · FusedLocation 1.1.3 SDK 에 연결된 코드가 컴파일되며, 제어 전에 가능 여부를 확인하고 실패하면 음성으로 안내합니다. Pleos Connect 에뮬레이터·실차 확인은 다음 단계입니다. 비상등은 Vehicle SDK 에 제어 API 가 없어 운전자에게 음성으로 켜 달라고 요청하고, 핸들 파지 감지·실내 카메라 졸음 경고는 공개 SDK 에 읽기 API 가 없어 판단 로직과 시연 버튼만 준비해 두었습니다.
+**현재 상태:** 시연 빌드가 전체 흐름을 실제로 구동합니다(자동 화면 테스트 `AppSmokeTest` 통과, Robolectric으로 Android 15·API 35 환경에서 실행). Pleos 빌드는 Vehicle 2.3.2 · NaviHelper 3.0.5 · FusedLocation 1.1.3 SDK 에 연결된 코드가 컴파일되며, 온도·풍량·통풍·창문은 범위를 먼저 확인하고, 어떤 제어든 실패하면 음성으로 대신 안내합니다. Pleos Connect 에뮬레이터·실차 확인은 다음 단계입니다. 비상등은 Vehicle SDK 에 제어 API 가 없어 운전자에게 음성으로 켜 달라고 요청하고, 핸들 파지 감지·실내 카메라 졸음 경고는 공개 SDK 에 읽기 API 가 없어 판단 로직과 시연 버튼만 준비해 두었습니다.
 
 ## APK
 
@@ -98,7 +99,7 @@ Pleos 빌드는 동행 전이나 정차 중에 **차량 연결 점검** 화면�
 ```
 
 - **판단 로직(`core/`, 144개)** — 각성 판정, 주행 상태, 대화와 기억, 음악·통화 타이밍, 거리 계산, 위치 차속(터널 유지), 차로 유지 보조, 휴식 계획과 졸음 예보, 내기 순환, 커피 냅, 운행 요약, 가족 문자, 실제 휴게소·졸음쉼터 파일 읽기.
-- **앱(35개)** — `AppSmokeTest`(화면 흐름), `ScreenLayoutTest`(5가지 화면 크기 배치와 48dp 터치 영역, 결과 이미지 [`docs/screens/`](docs/screens)), `DialogueFlowTest`(대본대로 빠르게·느리게·대답 없이 답하는 가짜 목소리로 정상 → 주의 → 위험 → 깨우기 → 가족 연락 → 안심 문자, 잠 질문 → 휴식 약속 → 쉼터 → 커피 냅, 낮잠 중 출발 시 취소, 마이크·인식기 오류 시 화면 대답, 휴식 미루기 등), Pleos 신호 변환 5개.
+- **앱(35개, 시연 앱 30개는 Robolectric으로 Android 15 · API 35 환경에서 실행)** — `AppSmokeTest`(화면 흐름), `ScreenLayoutTest`(5가지 화면 크기 배치와 48dp 터치 영역, 결과 이미지 [`docs/screens/`](docs/screens)), `DialogueFlowTest`(대본대로 빠르게·느리게·대답 없이 답하는 가짜 목소리로 정상 → 주의 → 위험 → 깨우기 → 가족 연락 → 안심 문자, 잠 질문 → 휴식 약속 → 쉼터 → 커피 냅, 낮잠 중 출발 시 취소, 마이크·인식기 오류 시 화면 대답, 질문 없이 먼저 말하기, 휴식 미루기 등), Pleos 신호 변환 5개.
 
 ## 기능 자세히
 
@@ -113,15 +114,15 @@ Pleos 빌드는 동행 전이나 정차 중에 **차량 연결 점검** 화면�
 
 **졸리기 전에**
 - **졸음 예보** — 출발할 때 어젯밤 잠·일어난 시각·지금 시각으로 이번 주행의 졸음(KSS 1~9)을 그리고, 위험(KSS 8 이상)이 시작될 시각을 알려 줍니다. 모형은 각성의 세 과정 모형(Åkerstedt & Folkard 1997), 값은 Ingre 외 2014(PLoS ONE)의 기본값입니다. 같은 모형으로 예측한 졸음이 한 단계 오를 때마다 사고 위험이 1.72배였습니다(Åkerstedt 외 2008). 사람마다 차이가 커서 예보는 출발점이고, 주행 중에는 대답 속도·핸들·차량 경고가 실제 상태를 알려 줍니다([`FatigueForecast.kt`](core/src/main/kotlin/ai/yeopjari/core/FatigueForecast.kt)).
-- **쉴 때를 미리 약속** — 잠·시간대·남은 거리로 첫 휴식을 정합니다(기본 2시간, 잠 5~7시간이면 1시간 반, 5시간 미만이면 1시간, 새벽·오후 졸음 시간대면 더 앞당기고, 예보한 위험보다 늦으면 30분 앞당김). 약속 10분 전에 가까운 쉼터를 권하고, "아직 괜찮아"라고 미루면 30분 동안 절반 간격으로 더 자주 확인합니다.
+- **쉴 때를 미리 약속** — 잠·시간대·남은 거리로 첫 휴식을 정합니다(기본 2시간, 잠 5~7시간이면 1시간 반, 5시간 미만이면 1시간, 새벽·오후 졸음 시간대면 더 앞당기고, 예보가 있으면 예보한 위험 30분 전까지로 앞당김). 약속 10분 전에 가까운 쉼터를 권하고, "아직 괜찮아"라고 미루면 30분 동안 절반 간격으로 더 자주 확인합니다.
 - **마지막 쉼터 안내** — 한 시간 넘게 달린 뒤, 다음 쉼터를 지나면 40km 넘게 쉴 곳이 없을 때 미리 알리고 들를지 묻습니다.
 - **환기 습관** — 내기 순환이 30분(새벽 20분) 넘게 이어지면 바깥 공기로 한 번 바꿉니다(실내 이산화탄소 누적, 졸음 판정과는 별개).
 
 **깨우고 쉬게 하기**
 - **주의** — 외기 유입과 운전석 창문 2~3cm(비 올 때 제외). 창문·찬 바람은 쉬러 가기까지의 다리일 뿐 졸음을 없애 주지 않는다고 솔직하게 말합니다(Reyner & Horne, 1998).
-- **위험** — 두 번 불러도 대답이 없으면 열혈 교관 목소리·알람·찬 바람·통풍 시트·실내등으로 깨우고, 대답하면 가장 가까운 쉼터를 경유지로 넣습니다. 계속 무응답이면 비상등을 켜 달라고 하고 정차를 안내합니다. 브레이크·조향·경적은 쓰지 않습니다.
+- **위험** — 다시 불러도 대답이 없는 확인이 두 번 이어지면(두 번째 확인은 45초 뒤) 열혈 교관 목소리·알람·찬 바람·통풍 시트·실내등으로 깨우고, 대답하면 가장 가까운 쉼터를 경유지로 넣습니다. 계속 무응답이면 비상등을 켜 달라고 하고 정차를 안내합니다. 브레이크·조향·경적은 쓰지 않습니다.
 - **커피 냅** — 쉼터에서 원하면 커피를 마시고 바로 15분 자도록 권합니다(Reyner & Horne, 1997). 커피를 좋아한다고 했으면 그 기억을 꺼내고, 그 휴게소에 커피 전문점이 공공데이터에 있으면 이름도 말합니다("여기 까페베네 있어요"). 주문·결제는 하지 않습니다(Pleos Connect 에 결제 API 없음).
-- **파워냅** — P단에서 좌석을 눕히고 환기한 뒤 알람으로 깨웁니다. 낮잠 중에 출발하면 바로 멈추고 좌석은 다음 정차 때 세웁니다.
+- **파워냅** — P단에서 좌석을 눕히고 환기한 뒤, 대답할 때까지 알람을 세 번까지 울려 깨우고 좌석을 세웁니다. 낮잠 중에 출발하면 바로 멈추고 좌석은 다음 정차 때 세웁니다. 커피를 사러 간 동안 대답이 없으면 빈 차에서 낮잠을 시작하지 않습니다.
 - **가족 알림** — 정차 중 등록한 번호로 파워냅 시작·재출발 때 문자를 보내고, 깨워도 대답이 없는 위급한 때에만 한 번 더(30분에 한 번까지), 다시 대답하면 안심 문자를 보냅니다. 위치는 휴게소 이름까지만 적고, 통신사 전송 결과(RESULT_OK)를 받았을 때만 "보냈다"고 기록합니다.
 
 **동승자다움**
@@ -129,6 +130,7 @@ Pleos 빌드는 동행 전이나 정차 중에 **차량 연결 점검** 화면�
 - **기억** — 응원하는 팀·좋아하는 간식·커피 같은 대화를 기억해 다음 대화와 다음 주행에 꺼냅니다. "재밌는 얘기 해 줘"에는 짧은 이야기로 답합니다.
 - **오늘의 운행** — 함께한 시간·대화 수·대답 속도·졸음 신호·깨우기·휴식·기억을 정리해 정차하거나 동행이 끝나면 보여 줍니다.
 - **목소리가 안 될 때도** — 듣는 동안 빠른 대답("응", "응, 괜찮아", "피곤해", "조용히 해 줘", "재밌는 얘기 해 줘", "어, 해 봐")과 입력칸이 함께 뜨고, 목소리와 같은 길로 들어갑니다(대답 속도도 같이 잼). 마이크·음성 인식·한국어 TTS 가 없으면 고칠 방법을 화면에 띄우고, 목소리를 한 번도 알아듣지 못했으면 무응답을 졸음으로 판정하지 않습니다.
+- **질문을 기다리지 않고 먼저 말하기** — 동행 중에는 화면에 **말하기** 버튼과 입력칸이 늘 있습니다. 누르고 "조용히 해 줘", "피곤해", "재밌는 얘기 해 줘"라고 하거나 입력하면 바로 따릅니다(차에서는 핸들의 음성 버튼에 연결).
 - **화면** — Pleos 분할 화면의 앱 창에 맞춘 짙은 유리 패널. 넓은 창에서는 세 칸(AI 오브·자막 / 대답 속도·조향·연속 주행 / 졸음 예보·대화), 세로나 좁은 창에서는 한 줄로 쌓고, 창 크기에 맞춰 0.7~3배로 키웁니다. 경고는 큰 상자 대신 오브와 테두리 빛으로 올라가고, 판단 근거("대답 2.8초 · 평소의 2.3배")를 칩으로 보여 줍니다. 버튼 터치 영역은 48dp 이상입니다.
 - **시작은 상황에 맞게** — 고속 주행 30분(새벽·오후 졸음 시간대 15분) 누적, 목적지 100km 이상이면 출발 5분 뒤, **같이 가기**나 차량 졸음 경고로는 바로 시작합니다.
 
@@ -189,7 +191,7 @@ app/    Android 앱 (Jetpack Compose)
 
 - 글꼴: [Wanted Sans](https://github.com/wanteddev/wanted-sans)(본문), [Pretendard](https://github.com/orioncactus/pretendard)(로고 글자) — 모두 SIL Open Font License 1.1. 라이선스 전문: [`app/src/main/assets/licenses/`](app/src/main/assets/licenses)
 - 휴게소·졸음쉼터 데이터: 공공데이터포털(한국도로공사)
-- 연구: Åkerstedt & Folkard 1997, Ingre 외 2014, Åkerstedt 외 2008, Reyner & Horne 1997·1998, Atchley 외 2014
+- 연구: Drews, Pasupathi & Strayer 2008, Åkerstedt & Folkard 1997, Ingre 외 2014, Åkerstedt 외 2008, Reyner & Horne 1997·1998, Atchley 외 2014
 
 ---
 

@@ -42,7 +42,7 @@ class AlertnessEngine(
     fun record(result: CheckResult): AlertStage {
         val calibrating = baseline.size < calibrationSize
         val score = score(result, judgeSpeed = !calibrating)
-        if (score == 0 && result.latencyMs != null) {
+        if (score == 0 && result.latencyMs != null && result.latencyMs >= MIN_SAMPLE_MS) {
             baseline.addLast(result.latencyMs)
             if (baseline.size > baselineSize) baseline.removeFirst()
         }
@@ -74,13 +74,22 @@ class AlertnessEngine(
 
     private fun score(result: CheckResult, judgeSpeed: Boolean): Int {
         val latency = result.latencyMs ?: return 5
-        val ratio = latency.toDouble() / baselineMs
+        val base = maxOf(baselineMs, MIN_SAMPLE_MS)
+        val ratio = latency.toDouble() / base
         val slowness = when {
             !judgeSpeed -> 0
+            latency - base < MIN_SLOWER_MS -> 0 // 0.4초 남짓 차이는 버릇·소음 수준이라 느림으로 보지 않는다
             ratio >= 2.0 -> 2
             ratio >= 1.5 -> 1
             else -> 0
         }
         return slowness + if (result.correct) 0 else 1
+    }
+
+    private companion object {
+        /** 이보다 짧은 대답 시간(시계 오차·즉시 누른 화면 대답)은 기준선에 넣지 않고, 기준선도 이 값 아래로 보지 않는다. */
+        const val MIN_SAMPLE_MS = 300L
+        /** 평소보다 이만큼은 늦어야 느린 대답으로 본다(기준선이 아주 짧을 때 0.8초 대답이 '2배'가 되는 것을 막는다). */
+        const val MIN_SLOWER_MS = 400L
     }
 }
