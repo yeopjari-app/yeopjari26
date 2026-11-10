@@ -228,6 +228,8 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
     /** 다음 휴식 약속(연속 주행 분)과, 그 시간이 다가와 이미 알렸는지. */
     private var restPlanMin: Int? = null
     private var planReminded = false
+    /** 휴식 약속 안내를 미룬 뒤 다시 안내할 수 있는 운전 시간(ms). 미루자마자 같은 안내를 되풀이하지 않게. */
+    private var planSnoozeUntilMs = 0L
     private var coffeeDone: CompletableDeferred<Unit>? = null
     private val quiet = QuietMode(platform.config.quietModeMs, platform.config.quietModeRiskyMs)
     private val family: FamilyNotifier = TestHooks.family?.invoke(app) ?: SmsFamilyNotifier(app, prefs)
@@ -361,8 +363,12 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
      * 화면의 "말하기": 질문을 기다리지 않고 운전자가 먼저 말한다. 한 번 듣고, 요청이면 바로 따른다.
      * (차에서는 핸들의 음성 버튼에 연결한다.)
      */
+    private var talkJob: Job? = null
+
     override fun talk() {
-        viewModelScope.launch {
+        // 여러 번 눌러도 한 번만 듣는다("네, 말씀하세요"가 줄줄이 이어지지 않게).
+        if (talkJob?.isActive == true) return
+        talkJob = viewModelScope.launch {
             startNow()
             exchange {
                 speak("네, 말씀하세요.")
@@ -386,8 +392,24 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
         _ui.update { it.copy(lastExchange = "운전자: $text") }
         // 목소리로 들은 말은 [ask] 가 이미 대화창에 올렸다.
         if (!alreadyShown) chat(ChatLine(fromDriver = true, text = text, time = clockNow()))
-        when (detectIntent(text)) {
-            DriverIntent.TIRED -> {
+        val intent = detectIntent(text)
+        // 낮잠 중에는 말로 대답해 깨우지 않는다(입력은 기록만 하고, 알람은 그대로 울린다).
+        if (_ui.value.napping) {
+            log("낮잠 중 — 입력만 기록: $text")
+            return
+        }
+        // 깨우는 중에 알아들을 수 있는 말을 하면(입력·말하기 포함) 대답한 것으로 보고 깨우기를 멈춘다.
+        if (wakeLevel > 0 && isMeaningfulAnswer(text)) {
+            clearWake()
+            routeToRestStop()
+            return
+        }
+        when (intent) {
+            DriverIntent.TIRED -> if (parked) {
+                // 이미 서 있으면 쉼터를 찾지 않는다.
+                speak("말씀해 주셔서 고마워요. 지금 서 계시니 여기서 충분히 쉬었다 가요.")
+                offerNap()
+            } else {
                 speak("말씀해 주셔서 고마워요.")
                 offerRestStop()
             }
@@ -441,6 +463,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
 
     /** 화면의 "재밌는 얘기" (음성으로 "재밌는 얘기 해 줘"라고 해도 된다). */
     override fun requestStory() {
+        if (_ui.value.napping) { log("낮잠 중 — 이야기 요청은 다시 출발한 뒤에"); return }
         storyRequested = true
         earlyCheckRequested = true
         startNow()
@@ -463,7 +486,13 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
     }
 
     override fun weave() {
-        platform.demo?.weave()
+        // 조향 평소 빈도를 잡는 처음 몇십 초에 흔들면 그 흔들림이 '평소'가 되어 버린다: 기준이 잡힌 뒤에 흔든다(시연 버튼).
+        if (steering.calibrated) { platform.demo?.weave(); return }
+        log("조향 기준 잡는 중 — 잡히면 바로 흔듭니다")
+        viewModelScope.launch {
+            withTimeoutOrNull(120_000) { while (!steering.calibrated) delay(500) } ?: return@launch
+            platform.demo?.weave()
+        }
     }
 
     override fun toggleLaneAssist() {
@@ -516,7 +545,8 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
         voice.setStyle(persona.pitch, persona.rate)
         _ui.update { it.copy(persona = persona, voicePersona = persona) }
         log("목소리: ${persona.label}")
-        if (!tracker.active || parked) viewModelScope.launch { exchange { speak(persona.intro) } }
+        // 낮잠·커피 기다리는 중에는 소개 말을 하지 않는다(목소리만 바꿔 둔다).
+        if ((!tracker.active || parked) && !_ui.value.napping && !_ui.value.coffeeWaiting) viewModelScope.launch { exchange { speak(persona.intro) } }
     }
 
     private var diagJob: Job? = null
@@ -615,6 +645,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
                     if (restPlanMin != null) {
                         restPlanMin = planner.nextAfterRestMin(sleep, localHour(snapshot.timeMs))
                         planReminded = false
+                        planSnoozeUntilMs = 0L
                         _ui.update { it.copy(restPlanMin = restPlanMin) }
                     }
                     log("휴식 인정")
@@ -665,6 +696,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
         checksThisTrip = 0
         restPlanMin = null
         planReminded = false
+        planSnoozeUntilMs = 0L
         moreOftenUntilDrivingMs = null
         sleep = SleepBand.UNKNOWN
         forecastRiskMinuteOfDay = null
@@ -691,7 +723,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
         // 졸음 예보: 잠·일어난 시각(평소 기상 시각)·지금 시각으로 이번 주행의 졸음을 미리 그린다.
         val depart = localMinuteOfDay(lastTimeMs)
         val tripMin = ((remainingKm ?: DEFAULT_FORECAST_KM) / AVG_KPH * 60).roundToInt()
-        val fc = FatigueForecast.forecast(heard?.let { SleepAnswer.hours(it) }, platform.config.usualWakeMinute, depart, tripMin)
+        val fc = FatigueForecast.forecast(heard?.takeIf { sleep != SleepBand.UNKNOWN }?.let { SleepAnswer.hours(it) }, platform.config.usualWakeMinute, depart, tripMin)
         forecastRiskMinuteOfDay = fc.riskAt?.let { Math.floorMod(depart + it, 1440) }
         _ui.update { it.copy(forecast = fc.points.map { p -> p.minute to p.kss.toFloat() }, forecastDepartMin = depart) }
         val plan = planner.plan(sleep, localHour(lastTimeMs), remainingKm, fc)   // 짧은 길이어도 도착 전 예보 위험이 있으면 계획한다
@@ -741,7 +773,8 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
     /** 약속한 휴식 [REST_PLAN_LEAD_MIN]분 전부터, 아직 쉼터를 권하지 않았으면 알린다. */
     private fun restPlanDue(): Boolean {
         val due = restPlanMin ?: return false
-        if (planReminded || restSuggested || parked || engine.stage != AlertStage.NORMAL) return false
+        if (planReminded || restSuggested || parked || !inForeground || engine.stage != AlertStage.NORMAL) return false
+        if (tracker.drivingMs < planSnoozeUntilMs) return false
         return tracker.drivingMs >= (due - REST_PLAN_LEAD_MIN) * 60_000L
     }
 
@@ -757,6 +790,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
             if (inQuietMode() && ok) return@launch
             waitWhileInCall()
             waitUntilNotBusy()
+            if (parked || passengerPresent) return@launch   // 그 사이 섰거나 동승자가 타면 지난 안내는 하지 않는다
             exchange {
                 speak(
                     if (ok) "내기 순환이 ${minutes}분째라 바깥 공기로 바꿀게요. 실내 공기가 탁해지면 머리가 무거워질 수 있어요."
@@ -892,6 +926,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
                 waitUntilNotBusy()
                 awaitTalkWindow()
                 waitUntilNotBusy()
+                if (!inForeground) continue   // 화면이 뒤에 있으면 듣지 못하니 이번 차례는 넘긴다(안내 문장도 아껴 둔다)
                 exchange {
                     if (conditionCheckPending) {
                         conditionCheckPending = false
@@ -1308,6 +1343,12 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
             log("휴식 제안 보류 — ${MORE_OFTEN_MIN}분 동안 확인 간격 절반")
             return
         }
+        if (parked) {
+            // 대답하는 사이 이미 차를 세웠다: 경유지는 넣지 않는다.
+            _ui.update { it.copy(restOption = null) }
+            speak("지금 서 계시네요. 여기서 잠깐 쉬어 가요.")
+            return
+        }
         // 들르기로 했을 때만 "다음 정차할 곳"으로 기억한다(커피 가게 이름·가족 문자에 쓴다).
         lastStopName = nearby.stop.name
         lastStop = nearby.stop
@@ -1328,6 +1369,8 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
     private fun declineRest() {
         restSuggested = false
         planReminded = false
+        // 미뤘으면 30분 운전한 뒤에 다시 안내한다(그 사이에는 평소처럼 더 자주 확인한다).
+        planSnoozeUntilMs = tracker.drivingMs + MORE_OFTEN_MIN * 60_000L
     }
 
     /**
@@ -1369,6 +1412,8 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
      * 알람이 확실히 들리도록 음악은 멈춘다. 브레이크·조향·경적은 쓰지 않는다. 앱에 열려 있지 않고, 차량 자체 안전 기능의 몫이다.
      */
     private fun wakeEscalation() {
+        // 그 사이 차를 세웠으면(P단) 깨우기를 시작하지 않는다: 정차 처리(파워냅 제안)가 이어받는다.
+        if (parked) { log("정차 중 — 깨우기 생략"); return }
         val level = ++wakeLevel
         viewModelScope.launch {
             // 2단계 이상은 계속 무응답이어도 WAKE_REPEAT_MS 에 한 번만 다시 울린다(알람이 쉬지 않고 이어지지 않게).
@@ -1377,7 +1422,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
                 log("깨우기 ${level}단계 — 방금 울려서 이번엔 건너뜀")
                 return@launch
             }
-            if (wakeLevel != level) return@launch
+            if (wakeLevel != level || parked) return@launch
             val burst = platform.cabin.wakeBurst()
             if (!windowCracked && !raining && !parked && platform.cabin.crackWindow(true)) windowCracked = true
             if (wakeLevel != level) {
@@ -1398,7 +1443,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
             log("깨우기 ${level}단계: ${parts.joinToString("·")}")
             exchange {
                 // 차례를 기다리는 사이 운전자가 대답했거나(깨우기 해제) 다음 단계가 이미 울렸으면 울리지 않는다.
-                if (wakeLevel != level) {
+                if (wakeLevel != level || parked) {
                     log("깨우기 ${level}단계 — 그 사이 상태가 바뀌어 건너뜀")
                     return@exchange
                 }
@@ -1430,7 +1475,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
                     // 비상등을 직접 켤 수 없는 차(공개 Pleos SDK 등)에서는 켰다고 말하지 않고 운전자에게 부탁한다
                     if (hazardOn) speak("비상등을 켰어요. 가장 가까운 안전한 곳에 차를 세워 주세요.")
                     else speak("비상등을 켜고, 가장 가까운 안전한 곳에 차를 세워 주세요.")
-                    if (wakeLevel == level) alertFamily()
+                    if (wakeLevel == level) alertFamily(level)
                 }
             }
         }
@@ -1440,7 +1485,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
      * 깨우기 2단계에도 대답이 없으면 등록된 가족에게 한 번 알려 전화로 깨워 달라고 한다.
      * 위치는 가장 가까운 쉼터 이름과 거리까지만. 30분 안에는 다시 보내지 않는다.
      */
-    private suspend fun alertFamily() {
+    private suspend fun alertFamily(level: Int) {
         val now = SystemClock.elapsedRealtime()
         if (familyAlerted || family.phone == null) return
         if (familyAlertAtMs?.let { now - it < FAMILY_ALERT_GAP_MS } == true) return
@@ -1448,6 +1493,12 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
         val text = FamilyNotice.noResponse(nearby?.stop?.name, nearby?.distanceKm?.roundToInt()?.coerceAtLeast(1))
         if (family.send(text)) {
             familyAlertAtMs = now   // 보낸 시각: 30분 안에는 다시 보내지 않는다(실패하면 다음 깨우기에서 다시 시도)
+            if (wakeLevel != level || parked) {
+                // 보내는 사이 운전자가 대답했거나 차를 세웠다: 가족이 걱정하지 않게 바로 안심 문자를 보낸다.
+                log("가족 위급 문자 보냄 — 그 사이 대답해서 안심 문자도 보냄")
+                if (family.send(FamilyNotice.respondedAgain())) familyAlertAtMs = null
+                return
+            }
             familyAlerted = true
             trip.wake(WakeAction.FAMILY_ALERT)
             addWake(WAKE_FAMILY)
@@ -1541,7 +1592,7 @@ class CopilotViewModel(app: Application) : AndroidViewModel(app), CopilotActions
                         speak(if (attempt == 1) "일어날 시간이에요." else "일어나셨어요? 15분 지났어요.")
                         if (ask() is ListenResult.Heard || !parked) break
                     }
-                    speak("좌석을 세울게요.")
+                    if (reclined) speak("좌석을 세울게요.")
                     // 나눈 이야기를 휴게소에서 다시 꺼낸다(예: "아, 호두과자 사 가는 거 잊지 마세요.")
                     conversation.memory.foodLabel?.let { speak("아, $it 사 가는 거 잊지 마세요.") }
                 }

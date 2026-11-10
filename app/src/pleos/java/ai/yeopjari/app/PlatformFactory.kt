@@ -631,8 +631,15 @@ private class PleosCabinControl(private val vehicle: Vehicle) : CabinControl {
             val target = min(b.maxValue, b.minValue + max(1, ((b.maxValue - b.minValue) * 0.05).roundToInt()))
             if (now >= target) return true // 이미 그만큼 열려 있다
             // 응답이 늦어도 창문은 이미 움직였을 수 있으니, 보내기 전에 원래 위치를 저장해 두고 닫을 때 그리로 되돌린다.
-            if (savedWindow == null) savedWindow = now
-            return sdkCall<Any>("window crack") { done, fail -> window.setWindowPosition(DRIVER_WINDOW, target, { _, v -> done(v ?: target) }, fail) } != null
+            val first = savedWindow == null
+            if (first) savedWindow = now
+            val ok = sdkCall<Any>("window crack") { done, fail -> window.setWindowPosition(DRIVER_WINDOW, target, { _, v -> done(v ?: target) }, fail) } != null
+            if (!ok && first) {
+                // 실패로 보고됐어도 움직였을 수 있으니 원래 위치로 한 번 되돌리고, 저장한 값은 비운다(다음 깨우기에서 새로 읽는다).
+                sdkCall<Any>("window back") { done, fail -> window.setWindowPosition(DRIVER_WINDOW, now, { _, v -> done(v ?: now) }, fail) }
+                savedWindow = null
+            }
+            return ok
         }
         val back = savedWindow ?: return true
         val ok = sdkCall<Any>("window restore") { done, fail -> window.setWindowPosition(DRIVER_WINDOW, back, { _, v -> done(v ?: back) }, fail) } != null

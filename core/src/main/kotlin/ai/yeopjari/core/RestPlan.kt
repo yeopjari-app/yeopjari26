@@ -26,16 +26,29 @@ object SleepAnswer {
     /** "푹 못 잤어", "잘 안 잤어", "충분하지 않아", "개운하지 않네"처럼 부정된 좋은 말. */
     private val NEGATED_GOOD = Regex("(푹|잘|충분|많이|개운)\\S{0,3}(못잤|못자|못잠|못했|못해|안잤|안자|않|아니)")
 
+    /** 대답 앞의 "네,"·"예"·"응" 같은 맞장구는 숫자 4(네)로 읽지 않게 뺀다("네, 일곱 시간 잤어요"). "네 시간"은 그대로 둔다. */
+    private val LEADING_YES = Regex("^\\s*(네|넵|예|응|어|아)[\\s,.!~]+(?!시간)")
+
+    /** "한 여섯 시간"의 '한'은 '대략'이다("한두 시간"은 그대로 1~2시간). */
+    private val ABOUT = Regex("한(?=(세|네|다섯|여섯|일곱|여덟|아홉|열|서너|너덧|대여섯|예닐곱)시간)")
+    /** "일곱 시간도 못 잤어", "7시간이 안 돼"는 그보다 조금 적게 잔 것이다. */
+    private val UNDER = Regex("시간(이|도)?(안돼|안되|안됐|안된|못잤|못자|안잤)")
+    /** "30분 잤어"처럼 분으로만 말한 잠. */
+    private val MINUTES = Regex("(\\d+|이십|삼십|사십|오십|십)분(밖에|정도|쯤)?(잤|자|눈)")
+    private val KO_MIN = mapOf("십" to 10, "이십" to 20, "삼십" to 30, "사십" to 40, "오십" to 50)
+
     fun hours(text: String): Double? {
-        val t = text.replace(" ", "")
+        val t = text.replace(LEADING_YES, "").replace(" ", "").replace(ABOUT, "")
+        if ("시간" !in t) MINUTES.find(t)?.let { m -> return (m.groupValues[1].toIntOrNull() ?: KO_MIN.getValue(m.groupValues[1])) / 60.0 }
         val half = if (t.contains("시간반")) .5 else 0.0
         // "일곱 시간 자려다 세 시간 잤어"처럼 여럿이면 적은 쪽(안전한 쪽)을 쓴다.
         val found = DIGITS.findAll(t).map { it.groupValues[1].toDouble() } + WORDS.findAll(t).map { KO.getValue(it.groupValues[1]).toDouble() }
-        return found.minOrNull()?.plus(half)
+        val under = if (UNDER.containsMatchIn(t)) .5 else 0.0
+        return found.minOrNull()?.plus(half)?.minus(under)
     }
 
     fun parse(text: String): SleepBand {
-        val t = text.replace(" ", "")
+        val t = text.replace(LEADING_YES, "").replace(" ", "")
         if ("전에일어" in t || Regex("시간전(에|이|부터|쯤)").containsMatchIn(t)) return SleepBand.UNKNOWN  // "한 시간 전에 일어났어"는 잔 시간이 아니다
         hours(t)?.let { h ->
             return when {
@@ -47,9 +60,9 @@ object SleepAnswer {
         return when {
             "잘못잤" in t || "잘못자" in t -> SleepBand.SHORT
             NEGATED_GOOD.containsMatchIn(t) -> SleepBand.SHORT
-            listOf("밤샜", "밤새", "밤을샜", "밤을새", "한숨도", "거의못", "하나도못", "못잤", "못자", "자지못", "안잤", "못잠").any { it in t } -> SleepBand.VERY_SHORT
-            listOf("조금밖에", "좀못", "별로", "부족", "설쳤", "덜잤").any { it in t } -> SleepBand.SHORT
-            listOf("푹", "잘잤", "충분", "많이잤", "개운").any { it in t } -> SleepBand.ENOUGH
+            listOf("밤샜", "밤새", "밤을샜", "밤을새", "꼬박샜", "꼬박새", "밤샘", "야근", "뜬눈", "한숨도", "거의못", "하나도못", "못잤", "못자", "자지못", "안잤", "못잠").any { it in t } -> SleepBand.VERY_SHORT
+            listOf("조금밖에", "좀못", "별로", "부족", "설쳤", "덜잤", "뒤척", "자주깼", "자꾸깼", "자다깼", "얕게", "조금잤", "적게").any { it in t } -> SleepBand.SHORT
+            listOf("푹", "잘잤", "충분", "많이잤", "개운", "꿀잠").any { it in t } -> SleepBand.ENOUGH
             else -> SleepBand.UNKNOWN
         }
     }

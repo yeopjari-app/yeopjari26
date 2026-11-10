@@ -44,16 +44,34 @@ class AndroidVoiceIO(context: Context) : VoiceIO {
     private var focus: AudioFocusRequest? = null
     private var paused = false
 
-    private val ttsReady = CompletableDeferred<Boolean>()
-    private val tts = TextToSpeech(appContext) { status ->
-        ttsReady.complete(status == TextToSpeech.SUCCESS)
-    }.apply { setAudioAttributes(speech) }
+    @Volatile private var ttsReady = CompletableDeferred<Boolean>()
+    @Volatile private var tts: TextToSpeech = newTts()
 
-    override val canListen: Boolean = SpeechRecognizer.isRecognitionAvailable(appContext)
+    /** 음성 엔진을 새로 붙인다. 앱을 켠 뒤에 엔진·한국어 음성을 설치해도 다시 점검할 때 쓸 수 있게 한다. */
+    private fun newTts(): TextToSpeech {
+        val ready = CompletableDeferred<Boolean>()
+        ttsReady = ready
+        return TextToSpeech(appContext) { status -> ready.complete(status == TextToSpeech.SUCCESS) }
+            .apply { setAudioAttributes(speech) }
+    }
 
-    override suspend fun koreanTtsReady(): Boolean =
+    /** 음성 인식 서비스는 앱을 켠 뒤에 설치될 수도 있어 물을 때마다 다시 확인한다. */
+    override val canListen: Boolean
+        get() = SpeechRecognizer.isRecognitionAvailable(appContext)
+
+    override suspend fun koreanTtsReady(): Boolean {
         // 음성 엔진이 끝내 준비 신호를 주지 않아도 점검이 멈춰 있지 않게 5초까지만 기다린다.
-        (withTimeoutOrNull(5_000) { ttsReady.await() } ?: false) && tts.isLanguageAvailable(Locale.KOREAN) >= TextToSpeech.LANG_AVAILABLE
+        suspend fun ready(): Boolean =
+            (withTimeoutOrNull(5_000) { ttsReady.await() } ?: false) && tts.isLanguageAvailable(Locale.KOREAN) >= TextToSpeech.LANG_AVAILABLE
+        if (ready()) return true
+        // 처음에 엔진이 없었거나 한국어 음성이 없었다면, 그 사이 설치했을 수 있으니 엔진을 새로 붙여 한 번 더 본다.
+        if (!ttsReady.isCompleted) return false
+        if (runCatching { tts.isSpeaking }.getOrDefault(false)) return false   // 말하는 중에는 엔진을 바꾸지 않는다
+        val old = tts
+        tts = newTts()
+        runCatching { old.shutdown() }
+        return ready()
+    }
 
     override fun holdMedia(mode: AudioMode) {
         if (mode <= held) return
@@ -92,6 +110,7 @@ class AndroidVoiceIO(context: Context) : VoiceIO {
     override suspend fun speak(text: String) {
         // 엔진이 초기화 결과를 끝내 알려 주지 않아도 대화가 영원히 멈추지 않게 5초까지만 기다린다.
         if (withTimeoutOrNull(5_000) { ttsReady.await() } != true) return
+        val tts = tts   // 말하는 동안 엔진이 바뀌어도 이 말은 같은 엔진으로 끝낸다
         tts.setLanguage(Locale.KOREAN)
         tts.setPitch(pitch)
         tts.setSpeechRate(rate)

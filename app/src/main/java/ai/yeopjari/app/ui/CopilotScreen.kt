@@ -278,7 +278,8 @@ fun CopilotScreen(state: UiState, actions: CopilotActions) {
             }
         }
         CompositionLocalProvider(
-            LocalDensity provides Density(base.density * scale, base.fontScale),
+            // 기기 글씨 크기를 아주 크게 해도 고정 높이 칸(타일·칩)이 겹치지 않게 1.15배까지만 따른다.
+            LocalDensity provides Density(base.density * scale, base.fontScale.coerceAtMost(1.15f)),
             LocalMinimumInteractiveComponentSize provides touch,
             LocalViewConfiguration provides config,
         ) {
@@ -516,7 +517,7 @@ private fun ForecastCard(state: UiState, modifier: Modifier) {
         }
         val dep = state.forecastDepartMin
         Text(
-            if (riskAt != null && dep != null) "${FatigueForecast.spokenClock(dep + riskAt)} 위험" else if (pts.isNotEmpty()) "위험 구간 없음" else "출발할 때 그려져요",
+            if (riskAt != null && dep != null) "${FatigueForecast.spokenClock(dep + riskAt)} 위험" else if (riskAt != null) "위험 구간 있음" else if (pts.isNotEmpty()) "위험 구간 없음" else "출발할 때 그려져요",
             fontSize = if (pts.isEmpty()) 20.sp else 26.sp, fontWeight = FontWeight.Bold, color = if (riskAt != null) Color(0xFFFF8A70) else P.text,
         )
         if (pts.isEmpty()) {
@@ -738,7 +739,6 @@ private fun judgements(s: UiState): List<Judgement> {
     s.quietReason?.let { out += Judgement("$it · 말 걸지 않음", Kind.NEUTRAL) }
     if (s.laneAssist) out += Judgement("차로 유지 보조 켜짐 · 대답으로 확인", Kind.NEUTRAL)
     if (s.staleAirFixed) out += Judgement("내기 순환 오래 · 외기로 환기", Kind.NEUTRAL)
-    if (s.listening) out += Judgement("대답 기다리는 중", Kind.NEUTRAL)
     val lat = s.lastLatencySec
     if (s.stage == AlertStage.CAUTION) {
         if (lat != null) out += Judgement("대답 %.1f초 · 평소의 %.1f배".format(lat, lat / s.baselineSec.coerceAtLeast(.1)), Kind.CAUTION)
@@ -1132,9 +1132,10 @@ private fun RestCard(option: RestOption, speedKph: Int) {
             }
         }
         // 칩이 많아도 잘리지 않게 줄을 바꿔 놓는다. 가장 중요한 "경유지 추가"를 맨 앞에.
-        FlowRow(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        val amenityChips = option.amenities?.split(",", "·")?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+        if (option.waypointAdded || amenityChips.isNotEmpty()) FlowRow(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (option.waypointAdded) RestChip("✓ 경유지 추가", ok = true)
-            option.amenities?.split(",", "·")?.map { it.trim() }?.filter { it.isNotEmpty() }?.forEach { RestChip(it, ok = false) }
+            amenityChips.forEach { RestChip(it, ok = false) }
         }
     }
 }
@@ -1261,7 +1262,7 @@ private fun ListeningPill(clock: State<Float>) {
                 drawLine(Color.White, Offset(x, (size.height - h) / 2), Offset(x, (size.height + h) / 2), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
             }
         }
-        Text("운전석에서 듣는 중…", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+        Text("듣는 중…", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -1332,7 +1333,9 @@ private fun statusText(state: UiState): String = when {
     state.passengerPresent -> "동승자 탑승 · 대화 멈춤"
     state.quietReason != null -> "조용히 · ${state.quietReason}"
     state.quietMode -> "조용히 모드 · 감지는 계속"
+    state.stage == AlertStage.DANGER -> if (state.listening) "위험 · 대답 기다리는 중" else "위험 단계"
     state.weaving -> "조향 흔들림 · 곧 확인"
+    state.stage == AlertStage.CAUTION -> if (state.listening) "주의 · 대답 기다리는 중" else "주의 단계"
     state.listening -> "대답 기다리는 중"
     state.waitingFor != null -> state.waitingFor
     state.speaking -> "말하는 중"

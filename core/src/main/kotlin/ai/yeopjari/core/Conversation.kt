@@ -92,12 +92,17 @@ class DriverMemory(facts: Map<String, String> = emptyMap()) {
 }
 
 private val COFFEE_WORDS = listOf("커피", "아메리카노", "라떼", "카페인")
-private val COFFEE_NO = Regex("(커피|아메리카노|라떼|카페인)(는|은|도|을|를)?\\s*(안|못|싫|끊|별로|말고|안\\s?마|잘\\s?안)")
+private val COFFEE_NO = Regex(
+    "(커피|아메리카노|라떼|카페인)(는|은|도|을|를)?\\s*(안|못|싫|끊|별로|말고|안\\s?마|잘\\s?안|대신|피하)" +
+        // "커피 마시지 않아요", "커피 마시고 싶지 않아", "커피 생각 없어", "커피 됐어요", "커피 마시면 안 돼요"
+        "|(커피|아메리카노|라떼|카페인)(는|은|도|을|를)?\\s*(\\S{0,4}\\s?)?(지\\s?(않|말|못)|싶지\\s?않|생각\\s?없|필요\\s?없|됐|안\\s?돼|기분\\s?(이\\s?)?아니)",
+)
 /** "커피 못 끊어", "커피 없으면 안 돼"는 커피를 좋아한다는 말이다. */
 private val COFFEE_HOOKED = Regex("못\\s?끊|없으면\\s*안|없으면\\s*못|없이는\\s*못|달고\\s?살")
 /** "커피 안 마시면 졸려" 처럼 조건으로 쓴 부정("…면")은 거절이 아니다. */
-private val COFFEE_CONDITIONAL = Regex("(안|못)\\s?마시면")
+private val COFFEE_CONDITIONAL = Regex("(안|못)\\s?마시면|마시지\\s?않으면|안\\s?먹으면")
 private val COFFEE_NOT = Regex("(커피|아메리카노|라떼|카페인)\\s*말고")
+private val COFFEE_WANT_NOT = Regex("(커피|아메리카노|라떼|카페인)[^,.!?]{0,10}싶지\\s?않")
 private val CLAUSE_SPLIT = Regex("고\\s+|,|지만|[는은인한]데|그리고|[.!?]")
 
 /**
@@ -110,6 +115,8 @@ fun coffeePreference(answer: String?): Boolean? {
     if (COFFEE_WORDS.none { t.contains(it) }) return null
     if (COFFEE_HOOKED.containsMatchIn(t) || COFFEE_CONDITIONAL.containsMatchIn(t)) return true
     if (COFFEE_NOT.containsMatchIn(t)) return false
+    // "커피 마시고 싶지 않아"는 "고"에서 마디가 나뉘어도 거절이다.
+    if (COFFEE_WANT_NOT.containsMatchIn(t)) return false
     val clauses = t.split(CLAUSE_SPLIT).map { it.trim() }.filter { c -> COFFEE_WORDS.any { c.contains(it) } }
     if (clauses.isEmpty()) return !COFFEE_NO.containsMatchIn(t)
     return clauses.any { !COFFEE_NO.containsMatchIn(it) && !NEG_TAIL.containsMatchIn(it) }
@@ -121,7 +128,9 @@ private val NEG_TAIL = Regex("(싫|별로|안\\s?마|못\\s?마|안\\s?좋)")
 private val TEAMS = linkedMapOf(
     "LG" to "LG 트윈스", "엘지" to "LG 트윈스", "두산" to "두산 베어스", "KIA" to "KIA 타이거즈", "기아" to "KIA 타이거즈",
     "삼성" to "삼성 라이온즈", "롯데" to "롯데 자이언츠", "한화" to "한화 이글스", "SSG" to "SSG 랜더스",
-    "NC" to "NC 다이노스", "KT" to "KT 위즈", "케이티" to "KT 위즈", "키움" to "키움 히어로즈",
+    "NC" to "NC 다이노스", "엔씨" to "NC 다이노스", "KT" to "KT 위즈", "케이티" to "KT 위즈", "키움" to "키움 히어로즈",
+    "트윈스" to "LG 트윈스", "베어스" to "두산 베어스", "타이거즈" to "KIA 타이거즈", "라이온즈" to "삼성 라이온즈",
+    "자이언츠" to "롯데 자이언츠", "이글스" to "한화 이글스", "랜더스" to "SSG 랜더스", "다이노스" to "NC 다이노스", "히어로즈" to "키움 히어로즈",
 )
 /** 주행이 이만큼 길어지면 가벼운 대화 대신 말놀이를 섞는다. */
 const val ACTIVE_AFTER_MIN = 90L
@@ -134,10 +143,15 @@ internal val ACTIVE_TASKS = listOf(
     "좋아하는 노래 제목, 첫 소절만 불러 줄래요?",
 )
 
+private val FOOD_CLAUSE_NEG = Regex("싫|별로|아니|질렸|(먹|좋아하|땡기)지\\s?않|싶지\\s?않|질려|맛없|안\\s?(먹|좋)|못\\s?먹")
+/** "싫지 않아", "질리지 않아"는 좋다는 말이라 부정을 찾기 전에 뺀다. */
+private val FOOD_DOUBLE_NEG = Regex("(싫|질리|나쁘)지\\s?(는\\s?|도\\s?)?않")
 /** 음식 이름 바로 뒤의 부정("우동은 별로", "라면 말고", "커피 안 마셔"). */
-private val FOOD_NEG = Regex("^(은|는|도|을|를|이|가)?\\s*(안|못|별로|싫|말고|빼고)")
+private val FOOD_NEG = Regex("^(은|는|도|을|를|이|가)?\\s*(안|못|별로|싫|말고|빼고|아니|질렸)")
 /** 팀 이름 뒤에 올 수 있는 말(경계). "삼성전자", "기아차", "롯데마트"는 팀으로 보지 않는다. */
-private val TEAM_TAIL = Regex("^($|[\\s,.!?~]|팬|이|가|은|는|요|를|을|의|예요|이에요|입니다|이요|야|죠|지|랑|하고)")
+private val TEAM_TAIL = Regex("^($|[\\s,.!?~]|팬|이|가|은|는|요|를|을|의|예요|이에요|입니다|이요|야|죠|지|랑|하고|트윈스|베어스|타이거즈|라이온즈|자이언츠|이글스|랜더스|다이노스|위즈|히어로즈)")
+/** 팀 이름 바로 뒤의 부정("엘지 싫어", "엘지 말고 두산", "엘지 응원 안 해"). */
+private val TEAM_NEG = Regex("^\\S*\\s*(싫|별로|말고|안\\s?(좋|봐|해)|응원\\s?안)")
 
 private val FOODS = listOf("호두과자", "알감자", "통감자", "소떡소떡", "핫바", "우동", "라면", "국밥", "어묵", "커피", "아메리카노")
 
@@ -148,7 +162,8 @@ private fun teamMentioned(answer: String, key: String): Boolean {
     while (i >= 0) {
         val before = if (i == 0) ' ' else answer[i - 1]
         val startOk = !before.isLetterOrDigit()
-        if (startOk && TEAM_TAIL.containsMatchIn(answer.substring(i + key.length))) return true
+        val tail = answer.substring(i + key.length)
+        if (startOk && TEAM_TAIL.containsMatchIn(tail) && !TEAM_NEG.containsMatchIn(tail)) return true
         i = answer.indexOf(key, i + 1, ignoreCase = true)
     }
     return false
@@ -161,7 +176,10 @@ private fun foodLiked(answer: String, food: String): Boolean {
     while (i >= 0) {
         // "휴게소라면", "졸음쉼터라면"의 '-라면'은 음식이 아니다: 바로 앞이 한글이면 건너뛴다.
         val ending = food == "라면" && i > 0 && answer[i - 1] in '가'..'힣'
-        if (!ending && !FOOD_NEG.containsMatchIn(answer.substring(i + food.length))) return true
+        val rest = answer.substring(i + food.length)
+        // 같은 마디 안에서 부정하면("라면 먹지 않아요", "우동 먹고 싶지 않아", "우동이랑 라면 둘 다 싫어요") 좋아하는 것이 아니다.
+        val clause = rest.split(Regex("[,.!?]|지만|는데|그리고"))[0]
+        if (!ending && !FOOD_NEG.containsMatchIn(rest.replace(FOOD_DOUBLE_NEG, " ")) && !FOOD_CLAUSE_NEG.containsMatchIn(clause.replace(FOOD_DOUBLE_NEG, " "))) return true
         i = answer.indexOf(food, i + 1)
     }
     return false
