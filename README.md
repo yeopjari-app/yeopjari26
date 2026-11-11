@@ -9,7 +9,7 @@
 
 <p align="center">Pleos Connect 앱 · Android (Kotlin, Jetpack Compose) · 현대자동차그룹 차량용 앱 개발 공모전 출품작</p>
 
-<p align="center">▶ <a href="https://youtu.be/pqLPt3M1N_U"><b>시연 영상 보기</b></a> (4분 50초 · 영어 자막 · 장마다 챕터) &nbsp;·&nbsp; 📦 <a href="apk/Yeopjari_release.apk"><b>APK 받기</b></a></p>
+<p align="center">▶ <a href="https://youtu.be/pqLPt3M1N_U"><b>시연 영상 보기</b></a> (4분 50초 · 영어 자막 · 장마다 챕터) &nbsp;·&nbsp; 📦 <a href="apk/yeopjari-app_Yeopjari_release.apk"><b>APK 받기</b></a></p>
 
 ## 한눈에
 
@@ -26,7 +26,7 @@
 
 ## 심사위원용 빠른 시작 (약 3분)
 
-1. **설치** — `apk/Yeopjari_release.apk` 를 Android 에뮬레이터(API 28 이상, 권장: Pixel Tablet · API 35 · Google Play 이미지)나 휴대폰에 끌어다 놓거나 `adb install apk/Yeopjari_release.apk`.
+1. **설치** — `apk/yeopjari-app_Yeopjari_release.apk` 를 Android 에뮬레이터(API 28 이상, 권장: Pixel Tablet · API 35 · Google Play 이미지)나 휴대폰에 끌어다 놓거나 `adb install apk/yeopjari-app_Yeopjari_release.apk`.
 2. **열기** — "옆자리"를 열고 마이크 권한을 허용합니다. 약 5초 뒤 가상 고속도로 주행(실제 1초 = 가상 1분)과 함께 동행이 시작됩니다. 바로 보려면 **같이 가기**.
    - 가로 화면에서 영상과 같은 세 칸 배치가 됩니다(에뮬레이터는 가로로 돌리거나 태블릿 AVD 권장).
    - 시연 빌드는 기다리지 않도록 시간을 줄였습니다: 20초마다 말을 걸고, 파워냅 15초(실제 15분), "조용히 해 줘" 1분(새벽·장시간 운전 30초 · 실제 20분/10분), 정차 10초면 휴식 인정(실제 10분).
@@ -37,6 +37,16 @@
    - 쉬는 것까지: **휴식 정차** → 파워냅 제안 → "응" → 커피 질문에 대답 → 15초 파워냅 → **다시 출발** (낮잠 중에 출발하면 바로 멈추고, 좌석은 다음 정차 때 세웁니다)
    - 먼저 말하기: **말하기**를 누르고 "조용히 해 줘"·"피곤해"·"재밌는 얘기 해 줘" (입력칸에 써도 됨)
    - 그 밖에: **내기 순환 켜기·끄기**(30초 뒤 외기로 전환) · **차로 유지 보조 켜기** · **차로 이탈 개입** · **핸들 놓음 경고** · **카메라 졸음 경고** · **차량 졸음 경고** · **동승자 탑승** · **음악 켜기** · **전화 받기** · "재밌는 얘기 해 줘"
+
+## 공모전 제출 정보
+
+| 항목 | 내용 |
+|---|---|
+| 앱 이름 · 한 줄 소개 | **옆자리(Yeopjari)** — 졸음이 오기 전에 먼저 말을 걸고 쉬는 것까지 챙기는 차량용 음성 동승자 |
+| 실행 방법 | APK 설치는 위 [심사위원용 빠른 시작](#심사위원용-빠른-시작-약-3분), 직접 빌드는 아래 [빌드와 실행](#빌드와-실행) |
+| 테스트 환경 · 필요한 설정 | Android 9(API 28) 이상 휴대폰이나 에뮬레이터. 권장: Pixel Tablet · API 35 · Google Play 이미지, 가로 화면. 마이크 권한을 허용하고, 목소리 대답에는 음성 인식(Google 앱)과 한국어 TTS 가 필요합니다. 없으면 화면의 빠른 대답·입력칸으로 같은 흐름을 볼 수 있습니다. Pleos 빌드는 Pleos Connect 기기·에뮬레이터 전용입니다. 자동 테스트는 Robolectric 으로 Android 15 · API 35 환경에서 실행합니다. |
+| Pleos Connect 에뮬레이터 버전 · 화면 규격 | 1차 접수 시점에는 Pleos Connect 에뮬레이터에서 아직 실행하지 않았습니다. Pleos 빌드는 Vehicle 2.3.2 · NaviHelper 3.0.5 · FusedLocation 1.1.3 SDK 로 빌드했고, PT 전에 Pleos 공식 샘플 앱([pleos-sample-vehicle-app](https://github.com/Pleos-Playground/pleos-sample-vehicle-app))이 쓰는 **Pleos_Connect_v2.1 (Android 14) · 2560×1440** 에뮬레이터에서 확인합니다. 화면은 가로 **1920×1080** 을 기준으로 설계했고, 창 크기에 맞춰 0.7~3배로 조절됩니다. 1280×720 · 1920×1080 · 2560×1600 · 휴대폰 세로 1080×2400 · 휴대폰 가로 2400×1080, 5가지 화면 배치를 자동 테스트로 확인했습니다([`docs/screens/`](docs/screens)). |
+| APK 위치 | [`apk/yeopjari-app_Yeopjari_release.apk`](apk/yeopjari-app_Yeopjari_release.apk) (시연 빌드 · 심사용) · [`apk/yeopjari-app_YeopjariPleos_release.apk`](apk/yeopjari-app_YeopjariPleos_release.apk) (Pleos 빌드). |
 
 ## Pleos Connect SDK 활용 지도
 
@@ -60,8 +70,8 @@
 
 | 파일 | 용도 |
 |---|---|
-| [`apk/Yeopjari_release.apk`](apk/Yeopjari_release.apk) (약 24MB) | **시연 빌드** — 일반 Android 휴대폰·에뮬레이터(API 28 이상)에서 가상 주행으로 전체 흐름 확인. **심사용** |
-| [`apk/Yeopjari_pleos_release.apk`](apk/Yeopjari_pleos_release.apk) (약 28MB) | **Pleos 빌드** — Pleos Connect 기기·에뮬레이터 전용, 실제 차량 신호·제어 사용 |
+| [`apk/yeopjari-app_Yeopjari_release.apk`](apk/yeopjari-app_Yeopjari_release.apk) (약 24MB) | **시연 빌드** — 일반 Android 휴대폰·에뮬레이터(API 28 이상)에서 가상 주행으로 전체 흐름 확인. **심사용** |
+| [`apk/yeopjari-app_YeopjariPleos_release.apk`](apk/yeopjari-app_YeopjariPleos_release.apk) (약 28MB) | **Pleos 빌드** — Pleos Connect 기기·에뮬레이터 전용, 실제 차량 신호·제어 사용 |
 
 두 파일 모두 공모전 시연용으로 Android 디버그 인증서로 서명했습니다. 배포 시 정식 인증서로 다시 서명합니다.
 

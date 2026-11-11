@@ -6,7 +6,7 @@ package ai.yeopjari.core
  * 잠깐 [DRILL] 목소리로 바꿔 강하게 깨운 뒤 원래 캐릭터로 돌아온다.
  */
 enum class Persona(val label: String, val tagline: String, val pitch: Float, val rate: Float) {
-    FRIEND("다정한 친구", "편하게, 곁에서", 1.05f, 1.0f),
+    FRIEND("다정한 친구", "편하게, 옆에서", 1.05f, 1.0f),
     UNCLE("경상도 아재", "투박해도 든든하게", 0.9f, 0.95f),
     DRILL("열혈 교관", "짧고 단호하게", 0.85f, 1.12f),
     JOKER("장난꾸러기", "놀리고, 웃기고, 안 재우고", 1.18f, 1.05f);

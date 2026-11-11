@@ -89,7 +89,7 @@ object RestStopCsv {
         return (v.toDoubleOrNull() ?: 0.0) > 0
     }
 
-    /** 따옴표 안의 쉼표·줄바꿈을 지키는 CSV 줄 나누기. */
+    /** 따옴표 안의 콤마(,)·줄바꿈을 지키는 CSV 줄 나누기. */
     internal fun rows(text: String): List<List<String>> {
         val out = mutableListOf<List<String>>()
         var row = mutableListOf<String>()
