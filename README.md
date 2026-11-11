@@ -9,6 +9,8 @@
 
 <p align="center">Pleos Connect 앱 · Android (Kotlin, Jetpack Compose) · 현대자동차그룹 차량용 앱 개발 공모전 출품작</p>
 
+<p align="center">▶ <a href="https://youtu.be/pqLPt3M1N_U"><b>시연 영상 보기</b></a> (4분 50초 · 영어 자막 · 장마다 챕터) &nbsp;·&nbsp; 📦 <a href="apk/Yeopjari_release.apk"><b>APK 받기</b></a></p>
+
 ## 한눈에
 
 - **출발 전 졸음 예보** — 어젯밤 잠과 지금 시각으로 이번 주행의 졸음을 미리 그리고(세 과정 각성 모형), 위험해지기 전에 쉴 때를 약속합니다.
@@ -20,7 +22,7 @@
 
 <p align="center"><img src="docs/screens/1920x1080.png" alt="옆자리 앱 화면 (가로 1920×1080)" width="820"></p>
 
-> 옆자리는 각성 유지를 돕는 보조 서비스이며 의료적 진단을 하지 않습니다. 시연 영상 속 시각·경로·운전자는 시연용 이야기입니다. 시연 영상 링크는 공모전 접수양식에 적었습니다.
+> 옆자리는 각성 유지를 돕는 보조 서비스이며 의료적 진단을 하지 않습니다. 시연 영상(https://youtu.be/pqLPt3M1N_U) 속 시각·경로·운전자는 시연용 이야기입니다.
 
 ## 심사위원용 빠른 시작 (약 3분)
 
@@ -47,7 +49,7 @@
 | **Vehicle** (Seat · Safety/ADAS) | 조수석 탑승, 운전자 주의 경고(`DRIVER_ATTENTION`) | 동승자가 타면 대화 양보, 차량 경고 시 바로 위험 단계 | 같은 `VehicleSnapshot` 필드 |
 | **Vehicle** (Safety/ADAS 경고등) | 차로 유지 보조 `LKA`·`LFA`, 차로 이탈 보조 개입(`ELK`, `LKA` 깜빡임) | 보조가 켜져 있으면 조향 대신 대답으로 판단, 개입하면 바로 확인 | `isLaneAssistOn` · `isLaneIntervention` ([PlatformFactory.kt:308](app/src/pleos/java/ai/yeopjari/app/PlatformFactory.kt#L308)) |
 | **Vehicle** (HVAC 내기 순환) | 내기 순환 켜짐/꺼짐 | 30분(새벽 20분) 넘게 이어지면 외기로 한 번 전환 | `VehicleSnapshot.recirculationOn` → `CabinAirTracker` |
-| **Vehicle** (HVAC · Seat · Window · Light) | 외기 유입·온도·풍량, 등받이·통풍, 운전석 창문, 실내등 | 주의 단계 환기, 깨우기(끝나면 온도·풍량·통풍·열선·실내등을 원래대로), 파워냅 좌석 눕히기·되돌리기 | `CabinControl` ([Ports.kt:43](app/src/main/java/ai/yeopjari/app/ports/Ports.kt#L43)) → `PleosCabinControl` ([PlatformFactory.kt:516](app/src/pleos/java/ai/yeopjari/app/PlatformFactory.kt#L516)) |
+| **Vehicle** (HVAC · Seat · Window · Light) | 외기 유입·온도·풍량, 등받이·통풍, 운전석 창문, 실내등 | 주의 단계 환기, 깨우기(끝나면 창문·온도·풍량·통풍·열선·실내등을 원래대로), 파워냅 좌석 눕히기·되돌리기 | `CabinControl` ([Ports.kt:43](app/src/main/java/ai/yeopjari/app/ports/Ports.kt#L43)) → `PleosCabinControl` ([PlatformFactory.kt:516](app/src/pleos/java/ai/yeopjari/app/PlatformFactory.kt#L516)) |
 | **NaviHelper** | 경유지 추가, 남은 거리 | 위험 단계에서 가장 가까운 휴게소를 경유지로, 100km 이상 장거리면 출발 5분 뒤 동행 | `Navigator` ([Ports.kt:23](app/src/main/java/ai/yeopjari/app/ports/Ports.kt#L23)) → `PleosNavigator` ([PlatformFactory.kt:701](app/src/pleos/java/ai/yeopjari/app/PlatformFactory.kt#L701)) |
 | **FusedLocation** | 현재 위치, 진행 방향 | 진행 방향 앞쪽의 가장 가까운 휴게소·졸음쉼터 찾기 | `LocationSource` ([Ports.kt:15](app/src/main/java/ai/yeopjari/app/ports/Ports.kt#L15)) → `PleosLocation` ([PlatformFactory.kt:155](app/src/pleos/java/ai/yeopjari/app/PlatformFactory.kt#L155)) — 끊기면 기기 GPS, 터널에서는 D단 동안 마지막 속도 유지 |
 | TextToSpeech · SpeechToText | 말하기, 듣기 | 대답 시작까지 걸린 시간 측정(음성 원문은 저장하지 않음), 목소리 4종 | `VoiceIO` ([Ports.kt:73](app/src/main/java/ai/yeopjari/app/ports/Ports.kt#L73)) → `AndroidVoiceIO` (Pleos TTS/STT 로 이 클래스만 교체) |
@@ -114,7 +116,7 @@ Pleos 빌드는 동행 전이나 정차 중에 **차량 연결 점검** 화면�
 
 **졸리기 전에**
 - **졸음 예보** — 출발할 때 어젯밤 잠·일어난 시각·지금 시각으로 이번 주행의 졸음(KSS 1~9)을 그리고, 위험(KSS 8 이상)이 시작될 시각을 알려 줍니다. 모형은 각성의 세 과정 모형(Åkerstedt & Folkard 1997), 값은 Ingre 외 2014(PLoS ONE)의 기본값입니다. 같은 모형으로 예측한 졸음이 한 단계 오를 때마다 사고 위험이 1.72배였습니다(Åkerstedt 외 2008). 사람마다 차이가 커서 예보는 출발점이고, 주행 중에는 대답 속도·핸들·차량 경고가 실제 상태를 알려 줍니다([`FatigueForecast.kt`](core/src/main/kotlin/ai/yeopjari/core/FatigueForecast.kt)).
-- **쉴 때를 미리 약속** — 잠·시간대·남은 거리로 첫 휴식을 정합니다(기본 2시간, 잠 5~7시간이면 1시간 반, 5시간 미만이면 1시간, 새벽·오후 졸음 시간대면 더 앞당기고, 예보가 있으면 예보한 위험 30분 전까지로 앞당김). 약속 10분 전에 가까운 쉼터를 권하고, "아직 괜찮아"라고 미루면 30분 동안 절반 간격으로 더 자주 확인합니다.
+- **쉴 때를 미리 약속** — 잠·시간대·남은 거리로 첫 휴식을 정합니다(기본 2시간, 잠 5~7시간이면 1시간 반, 5시간 미만이면 1시간, 새벽·오후 졸음 시간대면 더 앞당기고, 예보가 있으면 예보한 위험 30분 전까지로 앞당김). 약속 10분 전에 가까운 쉼터를 권하고, "아직 괜찮아"라고 미루면 30분 동안 절반 간격으로 더 자주 확인하고, 30분 운전한 뒤 다시 권합니다.
 - **마지막 쉼터 안내** — 한 시간 넘게 달린 뒤, 다음 쉼터를 지나면 40km 넘게 쉴 곳이 없을 때 미리 알리고 들를지 묻습니다.
 - **환기 습관** — 내기 순환이 30분(새벽 20분) 넘게 이어지면 바깥 공기로 한 번 바꿉니다(실내 이산화탄소 누적, 졸음 판정과는 별개).
 
